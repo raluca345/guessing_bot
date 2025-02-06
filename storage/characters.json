@@ -1,0 +1,195 @@
+[
+  {
+    "characterId": 1,
+    "characterName": "Ichika",
+    "characterLastName": "Hoshino",
+    "aliases": ["icchan", "ichi", "yakisoba pan"],
+    "unit": "Leo/Need"
+  },
+  {
+    "characterId": 2,
+    "characterName": "Saki",
+    "characterLastName": "Tenma",
+    "aliases": ["socky", "sockey", "sabi", "sakki"],
+    "unit": "Leo/Need"
+  },
+  {
+    "characterId": 3,
+    "characterName": "Honami",
+    "characterLastName": "Mochizuki",
+    "aliases": ["hona-chan", "hona", "hnm", "apple pie", "applpie"],
+    "unit": "Leo/Need"
+  },
+  {
+    "characterId": 4,
+    "characterName": "Shiho",
+    "characterLastName": "Hinomori",
+    "aliases": ["shii-chan", "sbib", "sbibo", "shiho-pyon"],
+    "unit": "Leo/Need"
+  },
+  {
+    "characterId": 5,
+    "characterName": "Minori",
+    "characterLastName": "Hanasato",
+    "aliases": ["bibori"],
+    "unit": "MORE MORE JUMP!"
+  },
+  {
+    "characterId": 6,
+    "characterName": "Haruka",
+    "characterLastName": "Kiritani",
+    "aliases": ["woog", "hawooga", "haru"],
+    "unit": "MORE MORE JUMP!"
+  },
+  {
+    "characterId": 7,
+    "characterName": "Airi",
+    "characterLastName": "Momoi",
+    "aliases": ["ib", "aibi", "ibi"],
+    "unit": "MORE MORE JUMP!"
+  },
+  {
+    "characterId": 8,
+    "characterName": "Shizuku",
+    "characterLastName": "Hinomori",
+    "aliases": ["sbibuku", "shizu", "sbuga", "sbug", "szk"],
+    "unit": "MORE MORE JUMP!"
+  },
+  {
+    "characterId": 9,
+    "characterName": "Kohane",
+    "characterLastName": "Azusawa",
+    "aliases": ["koha", "hamster", "hampter", "hammy"],
+    "unit": "Vivid BAD SQUAD"
+  },
+  {
+    "characterId": 10,
+    "characterName": "An",
+    "characterLastName": "Shiraishi",
+    "aliases": ["ab", "an-chan", "an chan"],
+    "unit": "Vivid BAD SQUAD"
+  },
+  {
+    "characterId": 11,
+    "characterName": "Akito",
+    "characterLastName": "Shinonome",
+    "aliases": ["akt", "abibo", "pancake", "pankeeki"],
+    "unit": "Vivid BAD SQUAD"
+  },
+  {
+    "characterId": 12,
+    "characterName": "Toya",
+    "characterLastName": "Aoyagi",
+    "aliases": ["touya", "boga"],
+    "unit": "Vivid BAD SQUAD"
+  },
+  {
+    "characterId": 13,
+    "characterName": "Tsukasa",
+    "characterLastName": "Tenma",
+    "aliases": ["kasa", "tsuka", "star", "basa", "tsubasa", "chukasa", "weirdo 1"],
+    "unit": "Wonderlands×Showtime"
+  },
+  {
+    "characterId": 14,
+    "characterName": "Emu",
+    "characterLastName": "Otori",
+    "aliases": ["ebu"],
+    "unit": "Wonderlands×Showtime"
+  },
+  {
+    "characterId": 15,
+    "characterName": "Nene",
+    "characterLastName": "Kusanagi",
+    "aliases": ["neen", "grass"],
+    "unit": "Wonderlands×Showtime"
+  },
+  {
+    "characterId": 16,
+    "characterName": "Rui",
+    "characterLastName": "Kamishiro",
+    "aliases": ["bui", "purple guy", "ourple guy", "weirdo 2"],
+    "unit": "Wonderlands×Showtime"
+  },
+  {
+    "characterId": 17,
+    "characterName": "Kanade",
+    "characterLastName": "Yoisaki",
+    "aliases": ["kanada", "kana", "knd"],
+    "unit": "25-ji, Nightcord de."
+  },
+  {
+    "characterId": 18,
+    "characterName": "Mafuyu",
+    "characterLastName": "Asahina",
+    "aliases": ["mafu", "mf", "mfy", "yuki"],
+    "unit": "25-ji, Nightcord de."
+  },
+  {
+    "characterId": 19,
+    "characterName": "Ena",
+    "characterLastName": "Shinonome",
+    "aliases": ["eba", "enanan", "rna", "naan", "dna", "nan"],
+    "unit": "25-ji, Nightcord de."
+  },
+  {
+    "characterId": 20,
+    "characterName": "Mizuki",
+    "characterLastName": "Akiyama",
+    "aliases": [
+      "amia",
+      "bugi",
+      "zuki",
+      "miboog",
+      "mizook",
+      "zookey",
+      "zooki",
+      "zook",
+      "mizu",
+      "mzk"
+    ],
+    "unit": "25-ji, Nightcord de."
+  },
+  {
+    "characterId": 21,
+    "characterName": "Miku",
+    "characterLastName": "Hatsune",
+    "aliases": ["mibu", "mike", "cat", "meek", "meeks"],
+    "unit": "VIRTUAL SINGER"
+  },
+  {
+    "characterId": 22,
+    "characterName": "Rin",
+    "characterLastName": "Kagamine",
+    "aliases": ["reen", "bin", "been", "cow", "binbin"],
+    "unit": "VIRTUAL SINGER"
+  },
+  {
+    "characterId": 23,
+    "characterName": "Len",
+    "characterLastName": "Kagamine",
+    "aliases": ["ben", "banana", "leeen"],
+    "unit": "VIRTUAL SINGER"
+  },
+  {
+    "characterId": 24,
+    "characterName": "Luka",
+    "characterLastName": "Megurine",
+    "aliases": ["looga", "loog", "look", "looka", "luke", "sheep"],
+    "unit": "VIRTUAL SINGER"
+  },
+  {
+    "characterId": 25,
+    "characterName": "MEIKO",
+    "characterLastName": "",
+    "aliases": ["mei", "mei-chan", "wine aunt"],
+    "unit": "VIRTUAL SINGER"
+  },
+  {
+    "characterId": 26,
+    "characterName": "KAITO",
+    "characterLastName": "",
+    "aliases": ["kaibo", "mom"],
+    "unit": "VIRTUAL SINGER"
+  }
+]

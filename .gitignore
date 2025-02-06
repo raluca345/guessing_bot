@@ -1,0 +1,8 @@
+/.env
+/.pytest_cache
+/.scannerwork
+/.vscode
+/__pycache__
+/bot_env
+/dbs
+/log
