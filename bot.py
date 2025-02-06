@@ -123,3 +123,5 @@ async def broadcast_tweets_to_channel():
 
 
 bot.run(os.getenv("TOKEN"))
+
+# TODO: create a README.md file
