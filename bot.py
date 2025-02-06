@@ -1,13 +1,13 @@
 import os
-from io import BytesIO
 
-import discord
 import aiohttp
-from PIL import Image, ImageDraw
-from discord.ext import commands, tasks
-from dotenv import load_dotenv
-from utility.utility_functions import logger, active_session, CGL_SERVER_ID, WEEK_ANNOUNCEMENT_CHANNEL, OTHER_ANNOUNCEMENT_CHANNEL, CGL_TWT_ACC_ID
+import discord
 import tweepy.asynchronous
+from discord.ext import tasks
+from dotenv import load_dotenv
+
+from utility.utility_functions import logger, active_session, CGL_SERVER_ID, WEEK_ANNOUNCEMENT_CHANNEL, \
+    OTHER_ANNOUNCEMENT_CHANNEL, CGL_TWT_ACC_ID
 
 # Set up intents
 intents = discord.Intents.default()
@@ -122,6 +122,6 @@ async def broadcast_tweets_to_channel():
         logger.error("Client is not initialized.")
 
 
-bot.run(os.getenv("TOKEN"))
+bot.run(os.getenv("TEST_TOKEN"))
 
 # TODO: create a README.md file

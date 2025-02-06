@@ -1,18 +1,16 @@
 import asyncio
-from io import BytesIO
 import random
+from io import BytesIO
 from urllib.parse import urljoin
 
 import discord
-from PIL import Image
 from aiohttp import ClientSession
-from discord import HTTPException, Embed
+from discord import HTTPException
 from discord.ext import commands, tasks
-from discord.ext.pages import PageGroup, Page, Paginator
 
 from storage.card_storage import CardStorage
 from utility.utility_functions import logger
-
+from utility.constants import *
 
 class RandomCard(commands.Cog):
     def __init__(self, bot):

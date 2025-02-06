@@ -3,7 +3,6 @@ from discord.ext import commands
 
 from storage.character_storage import CharacterStorage
 from storage.song_storage import SongStorage
-from utility.utility_functions import logger
 
 
 class Alias(commands.Cog):

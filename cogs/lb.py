@@ -4,7 +4,6 @@ import math
 import discord
 from discord.ext import commands, tasks
 from discord.ext.pages import Page
-from discord import EmbedAuthor
 
 from leaderboard.leaderboard import Leaderboard
 from utility.utility_functions import *

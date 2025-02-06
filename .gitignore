@@ -183,3 +183,9 @@ cython_debug/
 
 # mysql db config
 config/
+
+# pycharm files
+.idea/
+*.iml
+*.ipr
+*.iws
