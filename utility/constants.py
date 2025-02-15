@@ -9,6 +9,7 @@ CGL_TWT_ACC_ID = 1596219475019583488
 CGL_SERVER_ID = 1076494695204659220
 OWNER_ID = 599999906039726090
 OWNER_SERVER_ID = 1076494695204659220
+CGL_TWT_TEST_ACC_ID = 1292732679843123201
 
 UNITS = ["None", "VIRTUAL SINGER", "Leo/need", "MORE MORE JUMP!", "Wonderlands × Showtime", "Vivid BAD SQUAD",
          "25-ji, Nightcord de.", "Other"]
@@ -20,6 +21,16 @@ character_id_to_unit = {
     "25-ji, Nightcord de.": [17, 18, 19, 20],
     "VIRTUAL SINGER": [21, 22, 23, 24, 25, 26]
 }
+
+character_name_to_unit = {
+    "Leo/need": ["Ichika", "Saki", "Honami", "Shiho"],
+    "MORE MORE JUMP!": ["Minori", "Haruka", "Airi", "Shizuku"],
+    "Vivid BAD SQUAD": ["Kohane", "An", "Akito", "Toya"],
+    "Wonderlands × Showtime": ["Tsukasa", "Emu", "Nene", "Rui"],
+    "25-ji, Nightcord de.": ["Kanade", "Mafuyu", "Ena", "Mizuki"],
+    "VIRTUAL SINGER": ["Miku", "Rin", "Len", "Luka", "MEIKO", "KAITO"]
+}
+
 unit_aliases = [
     {
         "unit": UNITS[1],
