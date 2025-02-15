@@ -39,7 +39,7 @@ class TwtHub(commands.Cog):
             logger.info(self.bot.guilds)
             server = self.bot.get_guild(CGL_SERVER_ID)
             try:
-                response = await self.client.get_users_tweets(CGL_TWT_TEST_ACC_ID, max_results=5, tweet_fields="created_at")
+                response = await self.client.get_users_tweets(CGL_TWT_ACC_ID, max_results=5, tweet_fields="created_at")
                 if response.data:
                     tweet = response.data[0]
                     channel = None
