@@ -9,6 +9,7 @@ from discord.ext import commands, tasks
 
 from storage.song_storage import SongStorage
 from utility.utility_functions import *
+from views.buttons import Buttons
 
 
 class LyricsGuessing(commands.Cog):
@@ -27,7 +28,6 @@ class LyricsGuessing(commands.Cog):
     lyricsguess = discord.SlashCommandGroup(name="lyricsguess", description="Guess the name of the song, given a lyric. Use **endguess** to give up")
 
     async def guess_the_song(self, ctx: discord.ApplicationContext, language, unit):
-
         leaderboard = self.bot.get_cog("Lb")
 
         song_list_filtered_by_unit = []
@@ -39,12 +39,10 @@ class LyricsGuessing(commands.Cog):
                 if song["unit"] == unit:
                     song_list_filtered_by_unit.append(song)
 
-        # maybe move this to another function
         lyrics = {}
         song_name_list = []
         if language == "en":
             lyrics = {x["romaji_name"]: x["english_lyrics"] for x in song_list_filtered_by_unit}
-            # making sure a song that doesn't have english/kanji/romaji lyrics doesn't get picked
             song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit if x["english_lyrics"]]
         if language == "jp":
             lyrics = {x["romaji_name"]: x["kanji_lyrics"] for x in song_list_filtered_by_unit}
@@ -58,25 +56,21 @@ class LyricsGuessing(commands.Cog):
             await user.send("Couldn't fetch songs, please check the database")
             await ctx.respond("Could not fetch songs at this time, please try again later!")
             return
-        # logger.info("songs - %s", song_name_list)
-        song = random.choice(song_list_filtered_by_unit)
-        logger.info("chosen song - %s", song["romaji_name"])
-        #logger.info("lyrics - %s", lyrics[song["romaji_name"]])
-        song_lyric = random.choice(lyrics[song["romaji_name"]])
-        logger.info("song lyric - %s", song_lyric)
-        song["aliases"] = [sub(pattern=PATTERN, repl="", string=s.lower()) for s in song["aliases"]]
-        logger.info("song aliases - %s", song["aliases"])
 
-        if song["romaji_name"] in ["Jangsanbeom", "Alone"]:  # kr exclusives
+        song = random.choice(song_list_filtered_by_unit)
+        logger.info(f"Song: {song['romaji_name']}")
+        song_lyric = random.choice(lyrics[song["romaji_name"]])
+        song["aliases"] = [sub(pattern=PATTERN, repl="", string=s.lower()) for s in song["aliases"]]
+
+        if song["romaji_name"] in ["Jangsanbeom", "Alone"]:
             jacket_url = "https://storage.sekai.best/sekai-kr-assets/music/jacket/jacket_s_(song_id)_rip/jacket_s_(song_id).png"
-        
-        if song["romaji_name"] in self.exclusive_en_songs:  # en exclusives
+        if song["romaji_name"] in self.exclusive_en_songs:
             jacket_url = "https://storage.sekai.best/sekai-en-assets/music/jacket/jacket_s_(song_id)_rip/jacket_s_(song_id).png"
         if song["romaji_name"] not in ["Jangsanbeom", "Alone"]:
-            jacket_url = jacket_url.replace("(song_id)", str(song["id"]).rjust(3, '0'))  # adding leading zeros, excluding the kr songs since those have 5-digit ids
+            jacket_url = jacket_url.replace("(song_id)", str(song["id"]).rjust(3, '0'))
         else:
             jacket_url = jacket_url.replace("(song_id)", str(song["id"]))
-        logger.info(jacket_url)
+
         await ctx.respond(song_lyric)
         async with ClientSession() as session:
             async with session.get(url=jacket_url) as res:
@@ -89,54 +83,51 @@ class LyricsGuessing(commands.Cog):
                 buffer = BytesIO(await res.read())
                 song_jacket = Image.open(buffer)
                 song_jacket = song_jacket.resize(SONG_JACKET_THUMBNAIL_SIZE)
-                buffer.seek(0)  # Move the cursor to the start of the buffer
-                buffer.truncate(0)  # Clear the buffer content
-
-                # Save the resized image back into the buffer
-                song_jacket.save(buffer, format='PNG', quality=95, optimize=True)
-
-                # Reset the buffer position to the beginning so it can be read again
                 buffer.seek(0)
+                buffer.truncate(0)
+                song_jacket.save(buffer, format='PNG', quality=95, optimize=True)
+                buffer.seek(0)
+
         while True:
             try:
                 guess = await self.bot.wait_for('message', check=lambda
-                    message: message.author != self.bot and message.channel == ctx.channel and not message.author.bot, timeout=30.0)
+                message: message.author != self.bot and message.channel == ctx.channel and not message.author.bot, timeout=30)
                 is_finished = await self.check_guess(ctx, guess, song, buffer, song_list_filtered_by_unit, leaderboard)
                 if is_finished:
                     break
-            except asyncio.TimeoutError :
+            except asyncio.TimeoutError:
                 await ctx.followup.send(f"Time's up! The song was **{song['romaji_name']}**!",
-                                        file=discord.File(fp=buffer, filename="jacket.png"))
+                                        file=discord.File(fp=buffer, filename="jacket.png"),
+                                        view=Buttons(ctx, ["Play Again"], self.guess_the_song,
+                                                     ["romaji", song["unit"]]))
                 break
 
     async def check_guess(self, ctx, guess, song, buffer, song_list_filtered_by_unit, leaderboard):
         guessed_song = sub(pattern=PATTERN, string=guess.content.strip().lower(), repl="")
         guessed_song = guessed_song.replace(" ", "")
-        guessed_song = guessed_song.strip()  # making sure trailing spaces are really gone
-        logger.info("guess - %s", guessed_song)
-        
-        if guessed_song in song["aliases"] or guessed_song == song[
-            "romaji_name"].lower() or guessed_song == sub(pattern=PATTERN, repl=" ", string=song[
-            "romaji_name"]).lower() or guessed_song == sub(pattern=PATTERN, repl="", string=song[
-            "romaji_name"]).lower() or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).replace(" ", ""):
-            await ctx.followup.send(f"Congrats {ctx.author.mention}! You guessed **{song['romaji_name']}** correctly!", file=discord.File(fp=buffer, filename="jacket.png"))
+        guessed_song = guessed_song.strip()
+
+        if guessed_song in song["aliases"] or guessed_song == song["romaji_name"].lower():
+            await ctx.followup.send(f"Congrats {ctx.author.mention}! You guessed **{song['romaji_name']}** correctly!",
+                                    file=discord.File(fp=buffer, filename="jacket.png"),
+                                    view=Buttons(ctx, ["Play Again"], self.guess_the_song,
+                                                 ["romaji", song["unit"]]))
             user_id = guess.author.id
             if leaderboard is not None:
                 await leaderboard.on_right_guess(user_id)
             else:
                 await ctx.followup.send("Error updating lb")
-                logger.error("Error updating lb")
             return True
         elif guessed_song == "endguess":
-            await ctx.followup.send(f"Giving up? The song was **{song['romaji_name']}**!", file=discord.File(fp=buffer, filename="jacket.png"))
+            await ctx.followup.send(f"Giving up? The song was **{song['romaji_name']}**!",
+                                    file=discord.File(fp=buffer, filename="jacket.png"),
+                                    view=Buttons(ctx, ["Play Again"], self.guess_the_song,
+                                                 ["romaji", song["unit"]]))
             return True
         else:
-            # finding a song that matches the incorrect guess
-            temp = next((s["romaji_name"] for s in song_list_filtered_by_unit if guessed_song in s["aliases"] or guessed_song == s[
-                "romaji_name"].lower() or guessed_song == sub(pattern=PATTERN, repl=" ", string=s[
-                "romaji_name"]).lower() or guessed_song == sub(pattern=PATTERN, repl="", string=s[
-                "romaji_name"]).lower() or guessed_song == sub(pattern=PATTERN, repl="", string=s["romaji_name"]).replace(" ", "")), None)
-            
+            temp = next((s["romaji_name"] for s in song_list_filtered_by_unit if
+                         guessed_song in s["aliases"] or guessed_song == s["romaji_name"].lower()), None)
+
             if temp:
                 await ctx.followup.send(f"Nope, it's not **{temp}**, try again!")
             else:

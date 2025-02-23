@@ -1,3 +1,5 @@
+import re
+
 from utility.utility_functions import connect
 
 class SongStorage:
@@ -25,14 +27,14 @@ class SongStorage:
             aliases.append(row["romaji_name"])
             aliases = [x.lower() for x in aliases]
             row["aliases"] = aliases
-            english_lyrics = row["english_lyrics"].split("\r\n")
+            english_lyrics = re.split(r'\r\n|\n', row["english_lyrics"])
             english_lyrics = [x for x in english_lyrics]
             #logger.info(english_lyrics)
             row["english_lyrics"] = english_lyrics
-            kanji_lyrics = row["kanji_lyrics"].split("\r\n")
+            kanji_lyrics = re.split(r'\r\n|\n', row["kanji_lyrics"])
             kanji_lyrics = [x for x in kanji_lyrics]
             row["kanji_lyrics"] = kanji_lyrics
-            romaji_lyrics = row["romaji_lyrics"].split("\r\n")
+            romaji_lyrics = re.split(r'\r\n|\n', row["romaji_lyrics"])
             romaji_lyrics = [x for x in romaji_lyrics]
             row["romaji_lyrics"] = romaji_lyrics
             self.song_data.append(row)

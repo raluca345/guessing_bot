@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 import discord
 from aiohttp import ClientSession
 from discord.ext import commands, tasks
+from views.buttons import Buttons
 
 from storage.card_storage import CardStorage
 from storage.character_storage import CharacterStorage
@@ -28,13 +29,10 @@ class CardsGuessing(commands.Cog):
         self.birthday3_list = birthday3_filter(self.card_list.card_data)
         self.birthday4_list = birthday4_filter(self.card_list.card_data)
 
-        # self.wxs_wl_list = [card for card in self.card_list.card_data if card["assetbundle_name"] in WXS_WL]
-
     @commands.Cog.listener()
     async def on_ready(self):
         await asyncio.sleep(86400)
         self.update_card_list.start()
-
 
     def cog_unload(self) -> None:
         self.update_card_list.cancel()
@@ -53,7 +51,6 @@ class CardsGuessing(commands.Cog):
         await ctx.defer()
         try:
             await self.card_guess_helper(ctx, self.card_list.card_data)
-        # await self.card_guess_helper(ctx, self.wxs_wl_list)
         finally:
             active_session[ctx.channel_id] = False
 
@@ -70,8 +67,7 @@ class CardsGuessing(commands.Cog):
         all_character_aliases_but_the_right_one = [a for c in self.character_list.characters_data for a in c["aliases"]
                                                    if c["characterName"] != character["characterName"]]
         all_character_names_but_the_right_one = [c["characterName"].lower() for c in self.character_list.characters_data
-                                                 if
-                                                 c["characterName"] != character["characterName"]]
+                                                 if c["characterName"] != character["characterName"]]
         logger.info(all_character_aliases_but_the_right_one)
         logger.info(all_character_names_but_the_right_one)
 
@@ -101,7 +97,6 @@ class CardsGuessing(commands.Cog):
                 img = Image.open(buffer)
                 og_img = img.copy()
 
-        # if it's a wxs wl card rotate it
         if card["assetbundle_name"] in WXS_WL and card_type == "card_after_training.png":
             img = img.rotate(270, expand=True)
             og_img.resize(img.size)
@@ -113,11 +108,7 @@ class CardsGuessing(commands.Cog):
             img = img.crop(box)
 
         region = generate_img_crop(img, CARD_CROP_SIZE)
-        # so I don't have to save the image in memory
-        # covert it to a bytes image, which is stored into an in memory buffer
-        # and pass that to the discord.File constructor
         with BytesIO() as image_binary:
-            # Save the crop to the buffer
             region.save(image_binary, 'PNG', quality=95, optimize=True)
             image_binary.seek(0)
             picture = discord.File(fp=image_binary, filename="card.png")
@@ -128,11 +119,10 @@ class CardsGuessing(commands.Cog):
                 active_session[ctx.channel_id] = False
                 return
 
-            # Resize and save the og_img to the same buffer
-            image_binary.truncate(0)  # Clear the buffer
+            image_binary.truncate(0)
             image_binary.seek(0)
             s = og_img.size
-            s = s[0] // 4, s[1] // 4  # Reduce image size to 1/4
+            s = s[0] // 4, s[1] // 4
             og_img = og_img.resize(s)
             og_img.save(image_binary, 'PNG', quality=95, optimize=True)
             image_binary.seek(0)
@@ -142,27 +132,27 @@ class CardsGuessing(commands.Cog):
                 guess = await self.bot.wait_for('message', check=lambda
                     message: message.author != self.bot and message.channel == ctx.channel and not message.author.bot,
                                                 timeout=30.0)
-                is_finished = await self.check_guess(ctx, guess, character, card_name, answer, leaderboard)
+                is_finished = await self.check_guess(ctx, guess, character, card_name, answer, leaderboard, filtered_cards_list)
                 if is_finished:
                     break
             except asyncio.TimeoutError:
                 await ctx.followup.send(
-                    f"Time's up! It was **{character['characterLastName']}  {character['characterName']}** - **{card_name}**!", file=answer)
+                    f"Time's up! It was **{character['characterLastName']}  {character['characterName']}** - **{card_name}**!",
+                    file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
                 break
 
-    async def check_guess(self, ctx, guess, character, card_name, answer, leaderboard):
+    async def check_guess(self, ctx, guess, character, card_name, answer, leaderboard, filtered_cards_list):
         all_character_aliases_but_the_right_one = [a for c in self.character_list.characters_data for a in c["aliases"]
                                                    if c["characterName"] != character["characterName"]]
         all_character_names_but_the_right_one = [c["characterName"].lower() for c in self.character_list.characters_data
-                                                 if
-                                                 c["characterName"] != character["characterName"]]
+                                                 if c["characterName"] != character["characterName"]]
         if guess.content.lower().strip() == character[
             "characterName"].lower() or guess.content.lower().strip() in \
                 character["aliases"] or guess.content.lower().strip("-").strip() in character[
             "aliases"] or guess.content.lower().strip("-").strip() == character["characterName"].lower():
             await ctx.followup.send(
                 f'Congrats {guess.author.mention}! You guessed **{character["characterLastName"] + " " + character["characterName"]}** - **{card_name}** correctly!',
-                file=answer)
+                file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
             user_id = guess.author.id
             if leaderboard is not None:
                 await leaderboard.on_right_guess(user_id)
@@ -173,12 +163,12 @@ class CardsGuessing(commands.Cog):
         elif guess.content.lower().strip() == "endguess":
             await ctx.followup.send(
                 f'Giving up? It was **{character["characterLastName"] + " " + character["characterName"]}** - **{card_name}**!',
-                file=answer)
+                file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
             return True
         else:
             if guess.content.lower().strip() in all_character_aliases_but_the_right_one or guess.content.lower().strip() in all_character_names_but_the_right_one or guess.content.lower().strip(
                     "-").strip() in all_character_names_but_the_right_one or guess.content.lower().strip(
-                    "-").strip() in all_character_aliases_but_the_right_one:
+                "-").strip() in all_character_aliases_but_the_right_one:
                 wrong_chara_last_name = next(
                     (c["characterLastName"] for c in self.character_list.characters_data if
                      guess.content.lower().strip() in c["aliases"] or guess.content.lower().strip(
@@ -199,8 +189,6 @@ class CardsGuessing(commands.Cog):
                 await ctx.send('Nope, try again!')
                 return False
 
-    # guessing by rarity
-    # maybe i should put these in different cogs at some point
     @cards.command(name="fourstarguess", description="Guess from all 4* cards!")
     async def guess_four_star(self, ctx):
         if active_session[ctx.channel_id]:
@@ -210,7 +198,6 @@ class CardsGuessing(commands.Cog):
         await ctx.defer()
         await self.card_guess_helper(ctx, self.four_stars_list)
         active_session[ctx.channel_id] = False
-
 
     @cards.command(name="threestarguess", description="Guess from all 3* cards!")
     async def guess_three_star(self, ctx):
@@ -222,7 +209,6 @@ class CardsGuessing(commands.Cog):
         await self.card_guess_helper(ctx, self.three_stars_list)
         active_session[ctx.channel_id] = False
 
-
     @cards.command(name="twostarguess", description="Guess from all 2* cards!")
     async def guess_two_star(self, ctx):
         if active_session[ctx.channel_id]:
@@ -232,6 +218,7 @@ class CardsGuessing(commands.Cog):
         await ctx.defer()
         await self.card_guess_helper(ctx, self.two_stars_list)
         active_session[ctx.channel_id] = False
+
     @cards.command(name="bdayguess", description="Guess from all birthday rarity cards!")
     async def guess_birthday(self, ctx, rotation: discord.Option(discord.SlashCommandOptionType.integer, required=False, description="The rotation from which you want to guess, based on the Japanese server")):  #type: ignore
         if active_session[ctx.channel_id]:
@@ -251,7 +238,6 @@ class CardsGuessing(commands.Cog):
             await self.card_guess_helper(ctx, self.birthday_list)
         active_session[ctx.channel_id] = False
 
-    # sanrio
     @cards.command(name="sanrioguess", description="Guess from all sanrio cards!")
     async def guess_sanrio(self, ctx):
         if active_session[ctx.channel_id]:
@@ -262,7 +248,6 @@ class CardsGuessing(commands.Cog):
         await self.card_guess_helper(ctx, self.sanrio_list)
         active_session[ctx.channel_id] = False
 
-    # unit
     @cards.command(name="unitguess", description="Guess from all cards from the unit of your choice!")
     async def guess_unit(self, ctx, unit: discord.Option(str, choices=UNITS)):  #type: ignore
         if active_session[ctx.channel_id]:
@@ -276,7 +261,7 @@ class CardsGuessing(commands.Cog):
         await self.card_guess_helper(ctx, cards_filtered_by_unit_list)
         active_session[ctx.channel_id] = False
 
-    @tasks.loop(hours = 24)
+    @tasks.loop(hours=24)
     async def update_card_list(self):
         self.card_list.card_data = CardStorage()
         logger.info("Update card db!")
