@@ -56,6 +56,6 @@ async def check_server_permissions(channel_id):
     logger.info("Can the bot view this channel's history? %s", channel.permissions_for(server.me).read_message_history)
 
 
-bot.run(os.getenv("TEST_TOKEN"))
+bot.run(os.getenv("TOKEN"))
 
 # TODO: create a README.md file
