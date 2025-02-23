@@ -31,7 +31,6 @@ async def on_ready():
     logger.info(f"Connected guilds: {bot.guilds}")
     await check_server_permissions(WEEK_ANNOUNCEMENT_CHANNEL)
     await check_server_permissions(OTHER_ANNOUNCEMENT_CHANNEL)
-    #broadcast_tweets_to_channel.start()
 
 @bot.event
 async def on_command_error(ctx: discord.ApplicationContext, error):
