@@ -18,11 +18,12 @@ class TwtHub(commands.Cog):
         self.character_list = CharacterStorage().characters_data
         self.character_names = [character["characterName"] for character in self.character_list]
         self.units = UNITS
-        self.client = self.initialize_twitter_client()
+        #self.client = self.initialize_twitter_client()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.broadcast_tweets_to_channel.start()
+        #self.broadcast_tweets_to_channel.start()
+        pass
 
     @staticmethod
     def initialize_twitter_client():
