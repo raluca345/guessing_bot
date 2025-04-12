@@ -7,7 +7,11 @@ from random import randint
 
 import mysql.connector
 from PIL import Image
+from dotenv import load_dotenv
+
 from utility.constants import *
+import boto3
+from botocore.client import Config
 
 # db configuration
 
@@ -38,6 +42,14 @@ active_session = defaultdict(bool)
 #dict of locks to prevent the active_session dict from not being updated to false at the end of a session
 lock = {}
 
+load_dotenv()
+
+# r2 configuration
+ACCESS_KEY_ID = os.getenv('R2_ACCESS_KEY_ID')
+SECRET_ACCESS_KEY = os.getenv('R2_SECRET_ACCESS_KEY')
+BUCKET_NAME = os.getenv('BUCKET_NAME')
+ENDPOINT_URL = os.getenv('ENDPOINT_URL')
+
 def read_song_from_file(file_name):
     with open(file_name, "r") as f:
         lines = f.readlines()
@@ -53,6 +65,14 @@ def connect():
         'database': config['mysqlDB']['db']
     }
     return connect_to_db(config_db, attempts=3, delay=2)
+
+def connect_to_r2_storage():
+    s3 = boto3.client('s3',
+                      endpoint_url=ENDPOINT_URL,
+                      aws_access_key_id=ACCESS_KEY_ID,
+                      aws_secret_access_key=SECRET_ACCESS_KEY,
+                      config=Config(signature_version='s3v4'))
+    return s3
 
 
 # low level method

@@ -11,8 +11,7 @@ from views.buttons import Buttons
 from storage.card_storage import CardStorage
 from storage.character_storage import CharacterStorage
 from utility.utility_functions import *
-
-WXS_WL = ["res013_no033", "res014_no034", "res015_no033", "res016_no033"]
+from utility.constants import *
 
 class CardsGuessing(commands.Cog):
     def __init__(self, bot):
@@ -28,6 +27,10 @@ class CardsGuessing(commands.Cog):
         self.birthday2_list = birthday2_filter(self.card_list.card_data)
         self.birthday3_list = birthday3_filter(self.card_list.card_data)
         self.birthday4_list = birthday4_filter(self.card_list.card_data)
+        self.VERTICAL_CARDS = ["res013_no033", "res014_no034", "res015_no033", "res016_no033", "res018_no044"]
+        load_dotenv()
+        self.s3 = connect_to_r2_storage()
+        self.BUCKET_NAME = os.getenv("BUCKET_NAME")
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -55,8 +58,6 @@ class CardsGuessing(commands.Cog):
             active_session[ctx.channel_id] = False
 
     async def card_guess_helper(self, ctx: discord.ApplicationContext, filtered_cards_list):
-        card_url = "https://storage.sekai.best/sekai-jp-assets/character/member/"
-
         leaderboard = self.bot.get_cog("Lb")
 
         card = random.choice(filtered_cards_list)
@@ -72,32 +73,33 @@ class CardsGuessing(commands.Cog):
         logger.info(all_character_names_but_the_right_one)
 
         if card["card_rarity_type"] in ["rarity_2", "rarity_birthday"]:
-            card_type = "card_normal.png"
+            card_type = "normal.png"
         else:
-            card_type = random.choice(["card_normal.png", "card_after_training.png"])
+            card_type = random.choice(["normal.png", "trained.png"])
 
         if card["en_prefix"] != "":
             card_name = card["en_prefix"]
         else:
             card_name = card["prefix"]
 
-        temp = card["assetbundle_name"] + "_rip/" + card_type
-        card_url = urljoin(card_url, temp)
-        logger.info("url - %s", card_url)
-        async with ClientSession() as session:
-            async with session.get(url=card_url) as res:
-                if res.status != 200:
-                    user = await self.bot.fetch_user(OWNER_SERVER_ID)
-                    await user.send("Error fetching card")
-                    logger.error(res)
-                    active_session[ctx.channel_id] = False
-                    await ctx.respond("Could not fetch a card at this time, please try again later!")
-                    return
-                buffer = BytesIO(await res.read())
-                img = Image.open(buffer)
-                og_img = img.copy()
+        card_key = f"card_{card['id']}_{card_type}"
 
-        if card["assetbundle_name"] in WXS_WL and card_type == "card_after_training.png":
+        logger.info("url - %s", card_key)
+        try:
+            logger.info(f"Fetching card from R2 - bucket: {self.BUCKET_NAME}, key: {card_key}")
+            obj = self.s3.get_object(Bucket=self.BUCKET_NAME, Key=card_key)
+            buffer = BytesIO(obj['Body'].read())
+            img = Image.open(buffer)
+            og_img = img.copy()
+        except Exception as e:
+            logger.error(f"Error fetching image from R2: {e}")
+            user = await self.bot.fetch_user(OWNER_ID)
+            await user.send("Error fetching card from R2")
+            await ctx.respond("Could not fetch a card at this time, please try again later!")
+            active_session[ctx.channel_id] = False
+            return
+
+        if card["assetbundle_name"] in self.VERTICAL_CARDS and card_type == "card_after_training.png":
             img = img.rotate(270, expand=True)
             og_img.resize(img.size)
             og_img = img.copy()

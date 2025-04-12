@@ -46,7 +46,7 @@ class SongJacketGuessing(commands.Cog):
         jacket_url = "https://storage.sekai.best/sekai-jp-assets/music/jacket/jacket_s_(song_id)_rip/jacket_s_(song_id).png"
         if unit == "None":
             song_list_filtered_by_unit = self.song_list.song_data
-            logger.info("test song list - %s", song_list_filtered_by_unit)
+            logger.info("test song lst - %s", song_list_filtered_by_unit)
         else:
             for song in self.song_list.song_data:
                 if song["unit"] == unit:

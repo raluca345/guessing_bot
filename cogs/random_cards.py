@@ -64,7 +64,7 @@ class RandomCard(commands.Cog):
         await ctx.defer()
         card_url = "https://storage.sekai.best/sekai-jp-assets/character/member/"
         card_urls = []
-        cards_list = [] #file list
+        cards_list = [] #file lst
 
         cards = random.sample(self.card_list.card_data, k=5)
 
