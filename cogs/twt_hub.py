@@ -1,6 +1,8 @@
+import datetime
 import aiohttp
 import discord
 from discord.ext import commands, tasks
+from dotenv import load_dotenv
 from storage.character_storage import CharacterStorage
 
 from utility.utility_functions import logger
@@ -8,6 +10,7 @@ from utility.constants import *
 import os
 import tweepy.asynchronous
 
+load_dotenv()
 
 class TwtHub(commands.Cog):
     def __init__(self, bot):
@@ -26,7 +29,7 @@ class TwtHub(commands.Cog):
     def initialize_twitter_client():
         client = None
         try:
-            bearer_token = os.getenv('BEARER_TOKEN')
+            bearer_token = os.getenv('BEARER_TOKEN_2')
             if not bearer_token:
                 raise ValueError("BEARER_TOKEN is not set in the environment variables.")
             client = tweepy.asynchronous.AsyncClient(bearer_token=bearer_token, wait_on_rate_limit=True)
@@ -34,7 +37,8 @@ class TwtHub(commands.Cog):
         except Exception as e:
             logger.error(f"Error initializing Twitter client: {e}")
 
-    @tasks.loop(minutes=1)
+    #@tasks.loop(time=datetime.time(hour=13, minute=0))
+    @tasks.loop(hours=24)
     async def broadcast_tweets_to_channel(self):
         if self.client:
             logger.info(self.bot.guilds)

@@ -3,6 +3,8 @@
 /.scannerwork
 /.vscode
 /__pycache__
+__pycache__/
+__init__.py
 /bot_env
 /dbs
 /log
