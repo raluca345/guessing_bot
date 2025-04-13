@@ -75,14 +75,14 @@ class CardsGuessing(commands.Cog):
         if card["card_rarity_type"] in ["rarity_2", "rarity_birthday"]:
             card_type = "normal.png"
         else:
-            card_type = random.choice(["normal.png", "trained.png"])
+            card_type = random.choice(["normal.png", "after_training.png"])
 
         if card["en_prefix"] != "":
             card_name = card["en_prefix"]
         else:
             card_name = card["prefix"]
 
-        card_key = f"card_{card['id']}_{card_type}"
+        card_key = f"cards/card_{card['id']}_{card_type}"
 
         logger.info("url - %s", card_key)
         try:
