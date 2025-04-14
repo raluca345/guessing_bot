@@ -14,7 +14,7 @@ class CardStorage:
 
     def get_card_data(self):
 
-        query = "SELECT character_id, assetbundle_name, card_rarity_type, prefix, en_prefix, release_at, support_unit FROM cards"
+        query = "SELECT id, assetbundle_name, card_rarity_type, prefix, en_prefix, release_at, support_unit, character_id FROM cards"
 
         self.cursor.execute(query)
         rows = self.cursor.fetchall()

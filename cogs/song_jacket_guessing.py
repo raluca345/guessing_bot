@@ -21,6 +21,8 @@ class SongJacketGuessing(commands.Cog):
                                         'MikuFiesta', 'Thousand Little Voices', 'Plaything',
                                         'M@GICAL☆CURE! LOVE ♥ SHOT!', 'Just 1dB Louder', 'NAKAKAPAGPABAGABAG',
                                         'Twilight Melody', 'FAKE HEART']
+        self.s3 = connect_to_r2_storage()
+        self.BUCKET_NAME = os.getenv("BUCKET_NAME")
 
     def cog_unload(self) -> None:
         self.update_song_list.cancel()
@@ -42,7 +44,9 @@ class SongJacketGuessing(commands.Cog):
             await ctx.defer()
 
         leaderboard = self.bot.get_cog("Lb")
-        jacket_url = "https://storage.sekai.best/sekai-jp-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
+
+        song_list_filtered_by_unit = []
+        jacket_key = "songs/song-{}_{}"
         if unit == "None":
             song_list_filtered_by_unit = self.song_list.song_data
         else:
@@ -58,27 +62,23 @@ class SongJacketGuessing(commands.Cog):
         song = random.choice(song_list_filtered_by_unit)
         song["aliases"] = [sub(pattern=PATTERN, repl="", string=s.lower()) for s in song["aliases"]]
 
-        if song["romaji_name"] in ["Jangsanbeom", "Alone"]:  # kr exclusives
-            jacket_url = "https://storage.sekai.best/sekai-kr-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
-        if song["romaji_name"] in self.exclusive_english_songs:  # en exclusives
-            jacket_url = "https://storage.sekai.best/sekai-en-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
-        if song["romaji_name"] not in ["Jangsanbeom", "Alone"]:
-            jacket_url = jacket_url.replace("(song_id)",
-                                    str(song["id"]).rjust(3,'0'))  # adding leading zeros, excluding the kr songs since those have 5-digit ids
-        else:
-            jacket_url = jacket_url.replace("(song_id)", str(song["id"]))
-        logger.info(jacket_url)
+        song_name = sanitize_file_name(song_name_list[song["id"]]).replace(" ", "-")
+        song_id = str(song["id"]).zfill(3)
+        jacket_key = jacket_key.format(song_id, song_name)
 
-        async with ClientSession() as session:
-            async with session.get(url=jacket_url) as res:
-                if res.status != 200:
-                    user = await self.bot.fetch_user(OWNER_SERVER_ID)
-                    await user.send("Error fetching card")
-                    await ctx.respond("Could not fetch a card at this time, please try again later!")
-                    active_session[ctx.channel_id] = False
-                    return
-                buffer = BytesIO(await res.read())
-                img = Image.open(buffer)
+        logger.info(jacket_key)
+
+        try:
+            obj = self.s3.get_object(Bucket=self.BUCKET_NAME, Key=jacket_key)
+            buffer = BytesIO(obj['Body'].read())
+            img = Image.open(buffer)
+        except Exception as e:
+            logger.error(f"Error fetching image from R2: {e}")
+            user = await self.bot.fetch_user(OWNER_ID)
+            await user.send("Error fetching song jacket from R2")
+            await ctx.respond("Could not fetch a song jacket at this time, please try again later!")
+            active_session[ctx.channel_id] = False
+            return
         region = generate_img_crop(img, SONG_JACKET_CROP_SIZE)
         with BytesIO() as image_binary:
             region.save(image_binary, 'PNG', quality=95, optimize=True)

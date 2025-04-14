@@ -16,7 +16,8 @@ class LyricsGuessing(commands.Cog):
     def __init__(self, bot):
         self.song_list = SongStorage()
         self.bot = bot
-        self.exclusive_en_songs = ['Sweety glitch', 'Hello Builder', 'Unsung Melodies', 'Imaginary love story', 'Ten Thousand Stars', 'Intergalactic Bound', "Can't Make A Song!!", 'MikuFiesta', 'Thousand Little Voices', 'Plaything', 'M@GICAL☆CURE! LOVE ♥ SHOT!', 'Just 1dB Louder', 'NAKAKAPAGPABAGABAG', 'Twilight Melody', 'FAKE HEART']
+        self.s3 = connect_to_r2_storage()
+        self.BUCKET_NAME = os.getenv("BUCKET_NAME")
     def cog_unload(self) -> None:
         self.update_song_list.cancel()
 
@@ -31,7 +32,6 @@ class LyricsGuessing(commands.Cog):
         leaderboard = self.bot.get_cog("Lb")
 
         song_list_filtered_by_unit = []
-        jacket_url = "https://storage.sekai.best/sekai-jp-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
         if unit == "None":
             song_list_filtered_by_unit = self.song_list.song_data
         else:
@@ -41,6 +41,7 @@ class LyricsGuessing(commands.Cog):
 
         lyrics = {}
         song_name_list = []
+        jacket_key = "songs/song-{}_{}"
         if language == "en":
             lyrics = {x["romaji_name"]: x["english_lyrics"] for x in song_list_filtered_by_unit}
             song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit if x["english_lyrics"]]
@@ -62,31 +63,38 @@ class LyricsGuessing(commands.Cog):
         song_lyric = random.choice(lyrics[song["romaji_name"]])
         song["aliases"] = [sub(pattern=PATTERN, repl="", string=s.lower()) for s in song["aliases"]]
 
-        if song["romaji_name"] in ["Jangsanbeom", "Alone"]:
-            jacket_url = "https://storage.sekai.best/sekai-kr-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
-        if song["romaji_name"] in self.exclusive_en_songs:
-            jacket_url = "https://storage.sekai.best/sekai-en-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
-        if song["romaji_name"] not in ["Jangsanbeom", "Alone"]:
-            jacket_url = jacket_url.replace("(song_id)", str(song["id"]).rjust(3, '0'))
-        else:
-            jacket_url = jacket_url.replace("(song_id)", str(song["id"]))
+        song_name = sanitize_file_name(song["romaji_name"]).replace(" ", "-")
+        song_id = str(song["id"]).zfill(3)
+        jacket_key = jacket_key.format(song_id, song_name)
+
+        logger.info(jacket_key)
 
         await ctx.respond(song_lyric)
-        async with ClientSession() as session:
-            async with session.get(url=jacket_url) as res:
-                if res.status != 200:
-                    user = await self.bot.fetch_user(OWNER_SERVER_ID)
-                    await user.send(
-                        "There's been an error fetching the requested URL, please check the logs for details.")
-                    await ctx.respond("Could not fetch the song jacket at this time, please try again later.")
-                    return
-                buffer = BytesIO(await res.read())
-                song_jacket = Image.open(buffer)
-                song_jacket = song_jacket.resize(SONG_JACKET_THUMBNAIL_SIZE)
-                buffer.seek(0)
-                buffer.truncate(0)
-                song_jacket.save(buffer, format='PNG', quality=95, optimize=True)
-                buffer.seek(0)
+        try:
+            obj = self.s3.get_object(Bucket=self.BUCKET_NAME, Key=jacket_key)
+            buffer = BytesIO(obj['Body'].read())
+            buffer.seek(0)
+            img = Image.open(buffer)
+            img.load()
+
+            img = img.resize(SONG_JACKET_THUMBNAIL_SIZE)
+
+            buffer.seek(0)
+            buffer.truncate()
+
+            img.save(buffer, format="PNG")
+            buffer.seek(0)
+
+            file = discord.File(fp=buffer, filename="jacket.png")
+
+
+        except Exception as e:
+            logger.error(f"Error fetching image from R2: {e}")
+            user = await self.bot.fetch_user(OWNER_ID)
+            await user.send("Error fetching song jacket from R2")
+            await ctx.respond("Could not fetch a song jacket at this time, please try again later!")
+            active_session[ctx.channel_id] = False
+            return
 
         while True:
             try:
@@ -97,7 +105,7 @@ class LyricsGuessing(commands.Cog):
                     break
             except asyncio.TimeoutError:
                 await ctx.followup.send(f"Time's up! The song was **{song['romaji_name']}**!",
-                                        file=discord.File(fp=buffer, filename="jacket.png"),
+                                        file=file,
                                         view=Buttons(ctx, ["Play Again"], self.guess_the_song,
                                                      ["romaji", song["unit"]]))
                 break
