@@ -18,18 +18,17 @@ class TwtHub(commands.Cog):
         self.character_list = CharacterStorage().characters_data
         self.character_names = [character["characterName"] for character in self.character_list]
         self.units = UNITS
-        #self.client = self.initialize_twitter_client()
+        self.client = self.initialize_twitter_client()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        #self.broadcast_tweets_to_channel.start()
-        pass
+        self.broadcast_tweets_to_channel.start()
 
     @staticmethod
     def initialize_twitter_client():
         client = None
         try:
-            bearer_token = os.getenv('BEARER_TOKEN_2')
+            bearer_token = os.getenv('BEARER_TOKEN')
             if not bearer_token:
                 raise ValueError("BEARER_TOKEN is not set in the environment variables.")
             client = tweepy.asynchronous.AsyncClient(bearer_token=bearer_token, wait_on_rate_limit=True)
@@ -37,14 +36,14 @@ class TwtHub(commands.Cog):
         except Exception as e:
             logger.error(f"Error initializing Twitter client: {e}")
 
-    #@tasks.loop(time=datetime.time(hour=13, minute=0))
-    @tasks.loop(hours=24)
+    @tasks.loop(time=datetime.time(hour=13, minute=1))
     async def broadcast_tweets_to_channel(self):
         if self.client:
             logger.info(self.bot.guilds)
             server = self.bot.get_guild(CGL_SERVER_ID)
             try:
-                response = await self.client.get_users_tweets(CGL_TWT_ACC_ID, max_results=5, tweet_fields="created_at")
+                response = await self.client.get_users_tweets(CGL_TWT_ACC_ID, max_results=5,
+                                        tweet_fields="created_at")
                 if response.data:
                     tweet = response.data[0]
                     channel = None

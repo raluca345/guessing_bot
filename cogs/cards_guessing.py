@@ -12,7 +12,8 @@ from storage.card_storage import CardStorage
 from storage.character_storage import CharacterStorage
 from utility.utility_functions import *
 
-WXS_WL = ["res013_no033", "res014_no034", "res015_no033", "res016_no033"]
+# ty kana5 mafuyu for joining the gang
+VERTICAL_CARDS = ["res013_no033", "res014_no034", "res015_no033", "res016_no033", "res018_no044"] 
 
 class CardsGuessing(commands.Cog):
     def __init__(self, bot):
@@ -81,7 +82,7 @@ class CardsGuessing(commands.Cog):
         else:
             card_name = card["prefix"]
 
-        temp = card["assetbundle_name"] + "_rip/" + card_type
+        temp = card["assetbundle_name"] + "/" + card_type
         card_url = urljoin(card_url, temp)
         logger.info("url - %s", card_url)
         async with ClientSession() as session:
@@ -97,7 +98,7 @@ class CardsGuessing(commands.Cog):
                 img = Image.open(buffer)
                 og_img = img.copy()
 
-        if card["assetbundle_name"] in WXS_WL and card_type == "card_after_training.png":
+        if card["assetbundle_name"] in VERTICAL_CARDS and card_type == "card_after_training.png":
             img = img.rotate(270, expand=True)
             og_img.resize(img.size)
             og_img = img.copy()
@@ -142,10 +143,12 @@ class CardsGuessing(commands.Cog):
                 break
 
     async def check_guess(self, ctx, guess, character, card_name, answer, leaderboard, filtered_cards_list):
-        all_character_aliases_but_the_right_one = [a for c in self.character_list.characters_data for a in c["aliases"]
+        all_character_aliases_but_the_right_one = [a for c in self.character_list.characters_data for a 
+                                                   in c["aliases"]
                                                    if c["characterName"] != character["characterName"]]
-        all_character_names_but_the_right_one = [c["characterName"].lower() for c in self.character_list.characters_data
-                                                 if c["characterName"] != character["characterName"]]
+        all_character_names_but_the_right_one = [c["characterName"].lower() for c
+                                                in self.character_list.characters_data 
+                                                if c["characterName"] != character["characterName"]]
         if guess.content.lower().strip() == character[
             "characterName"].lower() or guess.content.lower().strip() in \
                 character["aliases"] or guess.content.lower().strip("-").strip() in character[

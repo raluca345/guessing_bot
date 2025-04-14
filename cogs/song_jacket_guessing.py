@@ -32,6 +32,7 @@ class SongJacketGuessing(commands.Cog):
 
     @discord.slash_command(name="songjacketguess", description="Guess the song from a crop of its jacket!")
     async def song_jacket_guess(self, ctx, unit: discord.Option(str, choices=UNITS)):  # type: ignore
+        song_list_filtered_by_unit = []
         if active_session[ctx.channel_id]:
             await ctx.respond('Guessing has already started!')
             return
@@ -41,12 +42,9 @@ class SongJacketGuessing(commands.Cog):
             await ctx.defer()
 
         leaderboard = self.bot.get_cog("Lb")
-
-        song_list_filtered_by_unit = []
-        jacket_url = "https://storage.sekai.best/sekai-jp-assets/music/jacket/jacket_s_(song_id)_rip/jacket_s_(song_id).png"
+        jacket_url = "https://storage.sekai.best/sekai-jp-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
         if unit == "None":
             song_list_filtered_by_unit = self.song_list.song_data
-            logger.info("test song list - %s", song_list_filtered_by_unit)
         else:
             for song in self.song_list.song_data:
                 if song["unit"] == unit:
@@ -59,15 +57,14 @@ class SongJacketGuessing(commands.Cog):
             return
         song = random.choice(song_list_filtered_by_unit)
         song["aliases"] = [sub(pattern=PATTERN, repl="", string=s.lower()) for s in song["aliases"]]
-        logger.info(song["aliases"])
 
         if song["romaji_name"] in ["Jangsanbeom", "Alone"]:  # kr exclusives
-            jacket_url = "https://storage.sekai.best/sekai-kr-assets/music/jacket/jacket_s_(song_id)_rip/jacket_s_(song_id).png"
+            jacket_url = "https://storage.sekai.best/sekai-kr-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
         if song["romaji_name"] in self.exclusive_english_songs:  # en exclusives
-            jacket_url = "https://storage.sekai.best/sekai-en-assets/music/jacket/jacket_s_(song_id)_rip/jacket_s_(song_id).png"
+            jacket_url = "https://storage.sekai.best/sekai-en-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
         if song["romaji_name"] not in ["Jangsanbeom", "Alone"]:
-            jacket_url = jacket_url.replace("(song_id)", str(song["id"]).rjust(3,
-                                                                               '0'))  # adding leading zeros, excluding the kr songs since those have 5-digit ids
+            jacket_url = jacket_url.replace("(song_id)",
+                                    str(song["id"]).rjust(3,'0'))  # adding leading zeros, excluding the kr songs since those have 5-digit ids
         else:
             jacket_url = jacket_url.replace("(song_id)", str(song["id"]))
         logger.info(jacket_url)
@@ -102,17 +99,18 @@ class SongJacketGuessing(commands.Cog):
                 guess = await self.bot.wait_for('message', check=lambda
                     message: message.author != self.bot and message.channel == ctx.channel and not message.author.bot,
                                                 timeout=30.0)
-                is_finished = await self.check_guess(ctx, guess, song, answer, song_list_filtered_by_unit, leaderboard)
+                is_finished = await self.check_guess(ctx, guess, song, answer, song_list_filtered_by_unit, leaderboard, unit)
                 if is_finished:
                     break
             except asyncio.TimeoutError:
                 tmp = song["romaji_name"]
+                logger.info(unit)
                 await ctx.followup.send(f"Time's up! The song was **{tmp}**!", file=answer,
-                                        view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, unit))
+                                        view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit]))
                 active_session[ctx.channel_id] = False
                 break
 
-    async def check_guess(self, ctx, guess, song, answer, song_list_filtered_by_unit, leaderboard):
+    async def check_guess(self, ctx, guess, song, answer, song_list_filtered_by_unit, leaderboard, unit):
         guessed_song = sub(pattern=PATTERN, string=guess.content.strip().lower(), repl="")
         guessed_song = guessed_song.replace(" ", "")
         guessed_song = guessed_song.strip()  # making sure trailing spaces are really gone
@@ -122,9 +120,10 @@ class SongJacketGuessing(commands.Cog):
             "romaji_name"]).lower() or guessed_song == sub(pattern=PATTERN, repl="", string=song[
             "romaji_name"]).lower() or guessed_song == sub(pattern=PATTERN, repl="",
                                                            string=song["romaji_name"]).replace(" ", ""):
-            await ctx.followup.send(f"Congrats {ctx.author.mention}! You guessed **{song['romaji_name']}** correctly!",
-                                    file=answer,
-                                    view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [song["unit"]]))
+            logger.info(unit)
+            await ctx.followup.send(f"Congrats {guess.author.mention}! You guessed **{song['romaji_name']}** correctly!",
+                        file=answer,
+                        view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit]))
             user_id = guess.author.id
             if leaderboard is not None:
                 await leaderboard.on_right_guess(user_id)
@@ -135,7 +134,7 @@ class SongJacketGuessing(commands.Cog):
             return True
         elif guessed_song == "endguess":
             await ctx.followup.send(f"Giving up? The song was **{song['romaji_name']}**!", file=answer,
-                                    view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [song["unit"]]))
+                                    view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit]))
             active_session[ctx.channel_id] = False
             return True
         else:

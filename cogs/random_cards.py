@@ -39,7 +39,7 @@ class RandomCard(commands.Cog):
         else:
             card_type = random.choice(["card_normal.png", "card_after_training.png"])
 
-        temp = card["assetbundle_name"] + "_rip/" + card_type
+        temp = card["assetbundle_name"] + "/" + card_type
         card_url = urljoin(card_url, temp)
         logger.info("url - %s", card_url)
 
@@ -74,7 +74,7 @@ class RandomCard(commands.Cog):
                 card_type = "card_normal.png"
             else:
                 card_type = random.choice(["card_normal.png", "card_after_training.png"])
-            temp = card["assetbundle_name"] + "_rip/" + card_type
+            temp = card["assetbundle_name"] + "/" + card_type
             card_url = urljoin(card_url, temp)
             logger.info("url - %s", card_url)
             card_urls.append(card_url)

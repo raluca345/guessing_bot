@@ -31,7 +31,7 @@ class LyricsGuessing(commands.Cog):
         leaderboard = self.bot.get_cog("Lb")
 
         song_list_filtered_by_unit = []
-        jacket_url = "https://storage.sekai.best/sekai-jp-assets/music/jacket/jacket_s_(song_id)_rip/jacket_s_(song_id).png"
+        jacket_url = "https://storage.sekai.best/sekai-jp-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
         if unit == "None":
             song_list_filtered_by_unit = self.song_list.song_data
         else:
@@ -63,9 +63,9 @@ class LyricsGuessing(commands.Cog):
         song["aliases"] = [sub(pattern=PATTERN, repl="", string=s.lower()) for s in song["aliases"]]
 
         if song["romaji_name"] in ["Jangsanbeom", "Alone"]:
-            jacket_url = "https://storage.sekai.best/sekai-kr-assets/music/jacket/jacket_s_(song_id)_rip/jacket_s_(song_id).png"
+            jacket_url = "https://storage.sekai.best/sekai-kr-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
         if song["romaji_name"] in self.exclusive_en_songs:
-            jacket_url = "https://storage.sekai.best/sekai-en-assets/music/jacket/jacket_s_(song_id)_rip/jacket_s_(song_id).png"
+            jacket_url = "https://storage.sekai.best/sekai-en-assets/music/jacket/jacket_s_(song_id)/jacket_s_(song_id).png"
         if song["romaji_name"] not in ["Jangsanbeom", "Alone"]:
             jacket_url = jacket_url.replace("(song_id)", str(song["id"]).rjust(3, '0'))
         else:
