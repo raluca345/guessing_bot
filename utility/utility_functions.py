@@ -1,6 +1,7 @@
 import configparser
 import logging
 import os
+import re
 import time
 from collections import defaultdict
 from random import randint
@@ -167,3 +168,8 @@ def unit_filter(cards, unit):
     filtered_cards = [card for card in cards if card["character_id"] in character_id_to_unit[unit] or card["support_unit"] in unit_to_aliases[unit]]
 
     return filtered_cards
+
+
+def sanitize_file_name(file_name):
+    """Remove or replace invalid characters in file names."""
+    return re.sub(r'[<>:"/\\|?*]', '-', file_name)
