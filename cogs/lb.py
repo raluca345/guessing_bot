@@ -64,19 +64,21 @@ class Lb(commands.Cog):
 
         for page in range(total_pages):
             embed = discord.Embed(title="Guessing Leaderboard", color=discord.Color.teal())
-            user_column = "\n\n"
-            points_column = "\n\n"
+            leaderboard_content = "```"  # Start a code block for monospaced formatting
 
-            for idx, user in enumerate(self.lb_user_list[page * per_page:(page + 1) * per_page], start=page * per_page + 1):
+            max_points_length = len(str(self.lb_user_list[0]["points"]))  # Get the length of the highest score
+
+            for idx, user in enumerate(self.lb_user_list[page * per_page:(page + 1) * per_page],
+                                    start=page * per_page + 1):
                 user_id = user["user_id"]
                 points = user["points"]
 
                 user_obj = await self.bot.fetch_user(user_id)
                 user_name = user_obj.name
-                # avoid accidental italics in the leaderboard
+                # Avoid accidental italics in the leaderboard
                 index = user_name.find("_")
 
-                if index !=-1:
+                if index != -1:
                     user_name = user_name[:index] + "\\" + user_name[index:]
 
                 # Replace numbers with emojis for the top 3 on the first page
@@ -88,15 +90,14 @@ class Lb(commands.Cog):
                     elif idx == 3:
                         position = "🥉"
                     else:
-                        position = f"   **{idx}.**"
+                        position = f"**{idx}.**"
                 else:
-                    position = f"   **{idx}.**"
+                    position = f"**{idx}.**"
 
-                user_column += f"{position} {user_name}\n"
-                points_column += f"{points}\n"
+                leaderboard_content += f"{position} {user_name} - {points} points\n"
 
-            embed.add_field(name="user", value=user_column, inline=True)
-            embed.add_field(name="points", value=points_column, inline=True)
+            leaderboard_content += "```"  # End the code block
+            embed.add_field(name="Leaderboard", value=leaderboard_content, inline=False)
             embed.set_footer(text="Updates every 10 minutes")
 
             page = Page(embeds=[embed])

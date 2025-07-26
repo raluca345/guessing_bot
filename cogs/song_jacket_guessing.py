@@ -2,6 +2,7 @@ import asyncio
 import random
 from io import BytesIO
 from re import sub
+from dotenv import load_dotenv
 
 import discord
 from aiohttp import ClientSession
@@ -16,11 +17,7 @@ class SongJacketGuessing(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.song_list = SongStorage()
-        self.exclusive_english_songs = ['Sweety glitch', 'Hello Builder', 'Unsung Melodies', 'Imaginary love story',
-                                        'Ten Thousand Stars', 'Intergalactic Bound', "Can't Make A Song!!",
-                                        'MikuFiesta', 'Thousand Little Voices', 'Plaything',
-                                        'M@GICAL☆CURE! LOVE ♥ SHOT!', 'Just 1dB Louder', 'NAKAKAPAGPABAGABAG',
-                                        'Twilight Melody', 'FAKE HEART']
+        load_dotenv()
         self.s3 = connect_to_r2_storage()
         self.BUCKET_NAME = os.getenv("BUCKET_NAME")
 

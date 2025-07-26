@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 import discord
 from aiohttp import ClientSession
 from discord.ext import commands, tasks
+from dotenv import load_dotenv
 from views.buttons import Buttons
 
 from storage.card_storage import CardStorage

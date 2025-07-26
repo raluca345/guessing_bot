@@ -2,6 +2,7 @@ import asyncio
 import random
 from io import BytesIO
 from re import sub
+from dotenv import load_dotenv
 
 import discord
 from aiohttp import ClientSession
@@ -16,6 +17,7 @@ class LyricsGuessing(commands.Cog):
     def __init__(self, bot):
         self.song_list = SongStorage()
         self.bot = bot
+        load_dotenv()
         self.s3 = connect_to_r2_storage()
         self.BUCKET_NAME = os.getenv("BUCKET_NAME")
     def cog_unload(self) -> None:
