@@ -22,7 +22,7 @@ character_id_to_unit = {
     "VIRTUAL SINGER": [21, 22, 23, 24, 25, 26]
 }
 
-character_name_to_unit = {
+unit_to_character_names = {
     "Leo/need": ["Ichika", "Saki", "Honami", "Shiho"],
     "MORE MORE JUMP!": ["Minori", "Haruka", "Airi", "Shizuku"],
     "Vivid BAD SQUAD": ["Kohane", "An", "Akito", "Toya"],

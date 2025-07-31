@@ -4,7 +4,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Buttons(discord.ui.View):
-    def __init__(self, ctx, buttons: list[str], callback, callback_args=None):
+    def __init__(self, ctx, buttons: list[str], callback, callback_args=None, timeout=None):
         super().__init__()
         self.ctx = ctx
         self.buttons = buttons

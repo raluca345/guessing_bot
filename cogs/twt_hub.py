@@ -12,24 +12,25 @@ import tweepy.asynchronous
 
 load_dotenv()
 
+
 class TwtHub(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.character_list = CharacterStorage().characters_data
         self.character_names = [character["characterName"] for character in self.character_list]
         self.units = UNITS
-        #self.client = self.initialize_twitter_client()
+        self.unit_to_character_names = unit_to_character_names
+        self.client = self.initialize_twitter_client()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        #self.broadcast_tweets_to_channel.start()
-        pass
+        self.broadcast_tweets_to_channel.start()
 
     @staticmethod
     def initialize_twitter_client():
         client = None
         try:
-            bearer_token = os.getenv('BEARER_TOKEN_2')
+            bearer_token = os.getenv('BEARER_TOKEN')
             if not bearer_token:
                 raise ValueError("BEARER_TOKEN is not set in the environment variables.")
             client = tweepy.asynchronous.AsyncClient(bearer_token=bearer_token, wait_on_rate_limit=True)
@@ -37,14 +38,73 @@ class TwtHub(commands.Cog):
         except Exception as e:
             logger.error(f"Error initializing Twitter client: {e}")
 
-    #@tasks.loop(time=datetime.time(hour=13, minute=0))
-    @tasks.loop(hours=24)
+    def handle_normal_week(self, character_names_line, server, week_number, tweet_url, role):
+        character_name = ""
+        for name in self.character_names:
+            if name in character_names_line:
+                character_name = name
+                break
+
+        emoji_name = f"{character_name}Stamp"
+        emoji = discord.utils.get(server.emojis, name=emoji_name)
+        message = (f"# Week {week_number} has been announced!"
+                   f"\n\nReach deathmatch to earn a {character_name} stamp {emoji}!"
+                   f"\n\n@prskcgl tweeted {tweet_url}\n{role.mention}")
+        return message
+
+    def handle_kizuna_week(self, character_names_line, server, week_number, tweet_url, role):
+        character_names = [name for name in self.character_names if name in character_names_line]
+        logger.info("Character names: %s", character_names)
+        emoji_names = [f"{name}Stamp" for name in character_names]
+        emojis = [discord.utils.get(server.emojis, name=name) for name in emoji_names]
+        logger.info("Emojis: %s", emojis)
+        message = (f"# Week {week_number} has been announced!"
+                   f"\n\nReach deathmatch to earn a {character_names[0]} stamp {emojis[0]}"
+                   f" and a {character_names[1]} stamp {emojis[1]}!\n\n@prskcgl tweeted {tweet_url}\n{role.mention}")
+        return message
+
+    def handle_shuffle_unit_week(self, character_names_line, server, week_number, tweet_url, role):
+        character_names = [name for name in self.character_names if name in character_names_line]
+        logger.info("Character names: %s", character_names)
+        emoji_names = [f"{name}Stamp" for name in character_names]
+        emojis = [discord.utils.get(server.emojis, name=name) for name in emoji_names]
+        message = (f"# Shuffle Unit Week {week_number} has been announced!"
+                   f"\n\nReach deathmatch to earn a shuffle unit stamp {' '.join(str(emoji) for emoji in emojis)}!"
+                   f"\n\n@prskcgl tweeted {tweet_url}\n{role.mention}")
+        return message
+
+    def handle_unit_week(self, first_line, server, week_number, tweet_url, role):
+        unit_word_position = first_line.index("Unit")
+        unit_name = ' '.join(first_line[:unit_word_position])
+        logger.info(f"Unit name: {unit_name}")
+        if unit_name in self.units:
+            character_names = self.unit_to_character_names[unit_name]
+            emoji_names = [f"{name}Stamp" for name in character_names]
+            logger.info(f"Emoji names: {emoji_names}")
+            emojis = [discord.utils.get(server.emojis, name=name) for name in emoji_names]
+            message = (f"# {unit_name} Unit Week {week_number} has been announced!"
+                       f"\n\nReach deathmatch to earn a {unit_name} stamp {' '.join(str(emoji) for emoji in emojis)}!"
+                       f"\n\n@prskcgl tweeted {tweet_url}\n{role.mention}")
+            return message
+        else:
+            logger.error(f"Unit {unit_name} not found in units list.")
+            return None
+
+    @staticmethod
+    def handle_everyone_week(week_number, tweet_url, role):
+        message = (f"# Week {week_number} has been announced!"
+                   f"\n\nReach deathmatch to earn a stamp of your choice!"
+                   f"\n\n@prskcgl tweeted {tweet_url}\n{role.mention}")
+        return message
+
+    @tasks.loop(time=datetime.time(hour=13, minute=5))
     async def broadcast_tweets_to_channel(self):
         if self.client:
             logger.info(self.bot.guilds)
             server = self.bot.get_guild(CGL_SERVER_ID)
             try:
-                response = await self.client.get_users_tweets(CGL_TWT_ACC_ID, max_results=5, tweet_fields="created_at")
+                response = await self.client.get_users_tweets(CGL_TWT_ACC_ID, max_results=5,
+                                                              tweet_fields="created_at")
                 if response.data:
                     tweet = response.data[0]
                     channel = None
@@ -56,60 +116,37 @@ class TwtHub(commands.Cog):
                         channel = self.bot.get_channel(WEEK_ANNOUNCEMENT_CHANNEL)
                         role = discord.utils.get(server.roles, name="Week Announcement Ping")
                         first_line_in_twt = tweet.text.split("\n")[0].split(" ")
+                        logger.info("First line in tweet: %s", first_line_in_twt)
+                        character_names_line = tweet.text.split("\n")[-1].split("!")[0].strip()
+                        logger.info("Character names line: %s", character_names_line)
                         week_position = first_line_in_twt.index("Week")
                         week_number = first_line_in_twt[week_position + 1]
-                        character_name = ""
-                        character_two_name = ""
-                        first_name_position = 0
 
-                        # check if it's a special week
-                        if week_position != 0:
-                            type_of_week = first_line_in_twt[week_position - 1]
-                            logger.info(f"Type of week: {type_of_week}")
-                            if type_of_week == "Unit":
-                                unit_word_position = type_of_week.index("Unit")
-                                week_number = first_line_in_twt[first_line_in_twt.index("Week", week_position +1) + 1]
-                                unit_name = " ".join(first_line_in_twt[:week_position - 1]).strip()
-                                logger.info(f"Unit name: {unit_name}")
-                                if unit_name in self.units:
-                                    character_names = character_name_to_unit[unit_name]
-                                    emoji_names = [f"{name}Stamp" for name in character_names]
-                                    emoji_list = [discord.utils.get(server.emojis, name=name) for name in emoji_names]
-                                    message = f"# {unit_name} Unit Week {week_number} has been announced!\n\nReach deathmatch to earn a {unit_name} stamp! {' '.join(str(emoji) for emoji in emoji_list)}\n\n@prskcgl tweeted {tweet_url}\n{role.mention}"
-                            else:
-                                last_line = tweet.text.split("\n")[-1].split(" ")
-                                for name in self.character_names:
-                                    if name in last_line:
-                                        character_name = name
-                                        break
-                                emoji_name = f"{character_name}Stamp"
-                                emoji = discord.utils.get(server.emojis, name=emoji_name)
+                        if "Anniversary" in first_line_in_twt:
+                            message = self.handle_everyone_week(week_number, tweet_url, role)
 
-                                message = f"# {type_of_week} Week {week_number} has been announced!\n\nReach deathmatch to earn a {character_name} stamp {emoji}!\n\n@prskcgl tweeted {tweet_url}\n{role.mention}"
+                        elif "Shuffle" in first_line_in_twt:
+                            # 2 "weeks" so look for the second one, the number is after that one
+                            # looks crappy so might change later
+                            week_position = first_line_in_twt.index("Week", week_position + 1)
+                            week_number = first_line_in_twt[week_position + 1]
+                            message = self.handle_shuffle_unit_week(character_names_line, server,
+                                                                    week_number, tweet_url, role)
 
-                        # normal week
+                        elif "Unit" in first_line_in_twt:
+                            # same thing as above
+                            week_position = first_line_in_twt.index("Week", week_position + 1)
+                            week_number = first_line_in_twt[week_position + 1]
+                            message = self.handle_unit_week(first_line_in_twt, server,
+                                                            week_number, tweet_url, role)
+
+                        elif "and" in character_names_line:
+                            message = self.handle_kizuna_week(character_names_line, server,
+                                                              week_number, tweet_url, role)
+
                         else:
-                            last_line = tweet.text.split("\n")[-1].split(" ")
-                            for name in self.character_names:
-                                if name in last_line:
-                                    first_name_position = last_line.index(name)
-                                    character_name = name
-                                    break
-                            if (last_line[first_name_position + 1] == "and") and (last_line[first_name_position + 2] in self.character_names):
-                                character_two_name = last_line[first_name_position + 2]
-
-                            emoji_name = f"{character_name}Stamp"
-                            emoji = discord.utils.get(server.emojis, name=emoji_name)
-                            if character_two_name:
-                                emoji_two_name = f"{character_two_name}Stamp"
-                                emoji_two = discord.utils.get(server.emojis, name=emoji_two_name)
-                                message = f"# Week {week_number} has been announced!\n\nReach deathmatch to earn a {character_name} and {character_two_name} stamp! {emoji} {emoji_two}\n\n@prskcgl tweeted {tweet_url}\n{role.mention}"
-                            else:
-                                message = f"# Week {week_number} has been announced!\n\nReach deathmatch to earn a {character_name} stamp! {emoji}\n\n@prskcgl tweeted {tweet_url}\n{role.mention}"
-                    else:
-                        channel = self.bot.get_channel(OTHER_ANNOUNCEMENT_CHANNEL)
-                        role = discord.utils.get(server.roles, name="Announcement Ping")
-                        message = f"@prskcgl tweeted {tweet_url}\n{role.mention}"
+                            message = self.handle_normal_week(character_names_line, server,
+                                                              week_number, tweet_url, role)
 
                     if channel:
                         try:
@@ -142,6 +179,7 @@ class TwtHub(commands.Cog):
                 logger.error(f"Error fetching tweets: {e}")
         else:
             logger.error("Client is not initialized.")
+
 
 def setup(bot):
     bot.add_cog(TwtHub(bot))

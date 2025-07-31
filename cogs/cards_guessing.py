@@ -6,11 +6,15 @@ from urllib.parse import urljoin
 import discord
 from aiohttp import ClientSession
 from discord.ext import commands, tasks
+from dotenv import load_dotenv
 from views.buttons import Buttons
 
 from storage.card_storage import CardStorage
 from storage.character_storage import CharacterStorage
 from utility.utility_functions import *
+
+# ty kana5 mafuyu for joining the gang
+VERTICAL_CARDS = ["res013_no033", "res014_no034", "res015_no033", "res016_no033", "res018_no044"] 
 from utility.constants import *
 
 class CardsGuessing(commands.Cog):
@@ -144,10 +148,12 @@ class CardsGuessing(commands.Cog):
                 break
 
     async def check_guess(self, ctx, guess, character, card_name, answer, leaderboard, filtered_cards_list):
-        all_character_aliases_but_the_right_one = [a for c in self.character_list.characters_data for a in c["aliases"]
+        all_character_aliases_but_the_right_one = [a for c in self.character_list.characters_data for a 
+                                                   in c["aliases"]
                                                    if c["characterName"] != character["characterName"]]
-        all_character_names_but_the_right_one = [c["characterName"].lower() for c in self.character_list.characters_data
-                                                 if c["characterName"] != character["characterName"]]
+        all_character_names_but_the_right_one = [c["characterName"].lower() for c
+                                                in self.character_list.characters_data 
+                                                if c["characterName"] != character["characterName"]]
         if guess.content.lower().strip() == character[
             "characterName"].lower() or guess.content.lower().strip() in \
                 character["aliases"] or guess.content.lower().strip("-").strip() in character[

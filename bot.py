@@ -35,10 +35,42 @@ async def on_ready():
 @bot.event
 async def on_command_error(ctx: discord.ApplicationContext, error):
     active_session[ctx.channel_id] = False
-    await ctx.followup.send("Something went wrong, please try again!", ephemeral=True)
-    logger.error(error)
+    
+    if isinstance(error, discord.NotFound):
+        logger.error(f"Interaction not found in channel {ctx.channel_id}: {error}")
+        # Can't use followup since interaction is unknown, try regular channel send
+        try:
+            await ctx.channel.send("The interaction timed out. Please try the command again.", ephemeral=True)
+        except discord.Forbidden:
+            logger.error(f"Cannot send messages to channel {ctx.channel_id}")
+        except Exception as e:
+            logger.error(f"Failed to send error message to channel {ctx.channel_id}: {e}")
+    elif isinstance(error, discord.Forbidden):
+        logger.error(f"Missing permissions in channel {ctx.channel_id}: {error}")
+    elif isinstance(error, discord.HTTPException):
+        logger.error(f"HTTP error in channel {ctx.channel_id}: {error}")
+        try:
+            await ctx.followup.send("A network error occurred. Please try again!", ephemeral=True)
+        except:
+            # If followup fails, try regular channel send
+            try:
+                await ctx.channel.send("A network error occurred. Please try again!", ephemeral=True)
+            except:
+                logger.error(f"Cannot send any messages to channel {ctx.channel_id}")
+    else:
+        try:
+            await ctx.followup.send("Something went wrong, please try again!", ephemeral=True)
+        except:
+            # If followup fails, try regular channel send
+            try:
+                await ctx.channel.send("Something went wrong, please try again!", ephemeral=True)
+            except:
+                logger.error(f"Cannot send any messages to channel {ctx.channel_id}")
+    
+    logger.error(f"Error in channel {ctx.channel_id}: {error}")
 
-@bot.command(name="reload", guild_ids=[1076494695204659220], default_member_permissions=discord.Permissions(administrator=True))
+@bot.command(name="reload", guild_ids=[1076494695204659220],
+            default_member_permissions=discord.Permissions(administrator=True))
 async def reload(ctx, cog_name: discord.Option(choices=cogs_list)): #type: ignore
     if cog_name in cogs_list:
         bot.reload_extension(f"cogs.{cog_name}")
@@ -51,8 +83,10 @@ load_dotenv()
 async def check_server_permissions(channel_id):
     server = bot.get_guild(CGL_SERVER_ID)
     channel = bot.get_channel(channel_id)
-    logger.info("Can the both send messages in this channel? %s", channel.permissions_for(server.me).send_messages)
-    logger.info("Can the bot view this channel's history? %s", channel.permissions_for(server.me).read_message_history)
+    logger.info("Can the both send messages in this channel? %s",
+                channel.permissions_for(server.me).send_messages)
+    logger.info("Can the bot view this channel's history? %s",
+                channel.permissions_for(server.me).read_message_history)
 
 
 bot.run(os.getenv("TOKEN"))
