@@ -44,13 +44,16 @@ class LyricsGuessing(commands.Cog):
         jacket_key = "songs/song-{}_{}"
         if language == "en":
             lyrics = {x["romaji_name"]: x["english_lyrics"] for x in song_list_filtered_by_unit}
-            song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit if x["english_lyrics"]]
+            song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit
+                              if x["english_lyrics"] not in (None, [""])]
         if language == "jp":
             lyrics = {x["romaji_name"]: x["kanji_lyrics"] for x in song_list_filtered_by_unit}
-            song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit if x["kanji_lyrics"]]
+            song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit
+                              if x["kanji_lyrics"] not in (None, [""])]
         if language == "romaji":
             lyrics = {x["romaji_name"]: x["romaji_lyrics"] for x in song_list_filtered_by_unit}
-            song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit if x["romaji_lyrics"]]
+            song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit
+                              if x["romaji_lyrics"] not in (None, [""])]
 
         if not song_name_list:
             user = await self.bot.fetch_user(OWNER_SERVER_ID)
@@ -58,8 +61,16 @@ class LyricsGuessing(commands.Cog):
             await ctx.respond("Could not fetch songs at this time, please try again later!")
             return
 
+        song_list_filtered_by_unit = [
+            song for song in song_list_filtered_by_unit
+            if song["romaji_name"] in song_name_list
+        ]
+
+        logger.info([song["romaji_name"] for song in song_list_filtered_by_unit])
+
         song = random.choice(song_list_filtered_by_unit)
-        logger.info(f"Song: {song['romaji_name']}")
+
+        logger.info(f"Song: {song}")
         song_lyric = random.choice(lyrics[song["romaji_name"]])
         song["aliases"] = [sub(pattern=PATTERN, repl="", string=s.lower()) for s in song["aliases"]]
 
