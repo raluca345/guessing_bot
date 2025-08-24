@@ -30,9 +30,9 @@ class TwtHub(commands.Cog):
     def initialize_twitter_client():
         client = None
         try:
-            bearer_token = os.getenv('BEARER_TOKEN')
+            bearer_token = os.getenv('BEARER_TOKEN_2')
             if not bearer_token:
-                raise ValueError("BEARER_TOKEN is not set in the environment variables.")
+                raise ValueError("BEARER_TOKEN_2 is not set in the environment variables.")
             client = tweepy.asynchronous.AsyncClient(bearer_token=bearer_token, wait_on_rate_limit=True)
             return client
         except Exception as e:
@@ -67,6 +67,15 @@ class TwtHub(commands.Cog):
         character_names = [name for name in self.character_names if name in character_names_line]
         logger.info("Character names: %s", character_names)
         emoji_names = [f"{name}Stamp" for name in character_names]
+
+        for name in character_names:
+            if name == "MEIKO":
+                emoji_names.append("MeikoStamp")
+                emoji_names.remove("MEIKOStamp")
+            if name == "KAITO":
+                emoji_names.append("KaitoStamp")
+                emoji_names.remove("KAITOStamp")
+
         emojis = [discord.utils.get(server.emojis, name=name) for name in emoji_names]
         message = (f"# Shuffle Unit Week {week_number} has been announced!"
                    f"\n\nReach deathmatch to earn a shuffle unit stamp {' '.join(str(emoji) for emoji in emojis)}!"

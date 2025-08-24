@@ -62,8 +62,8 @@ class TestTwtHub:
                 {"characterName": "Rin"},
                 {"characterName": "Len"},
                 {"characterName": "Luka"},
-                {"characterName": "Meiko"},
-                {"characterName": "Kaito"}
+                {"characterName": "MEIKO"},
+                {"characterName": "KAITO"}
             ]
             yield MockCharacterStorage
 
@@ -172,29 +172,31 @@ class TestTwtHub:
         [
             "Shuffle Unit Week - Week 138 of Card Guessing League will be held on 21/06 (Sat)"
             "\n\nMain League: 10pm JST"
-            "\n\nThis round's focus are Luka, Akito, Rui and Ena!! Come enjoy the mysterious atmosphere!"
+            "\n\nThis round's focus are Honami, Airi, Shizuku, Mafuyu and MEIKO! Come enjoy the mysterious atmosphere!"
         ],
         indirect=True
     )
     async def test_broadcast_tweets_to_channel_shuffle_unit_week(self, mock_twt, mock_twt_hub, mock_channel, mock_role):
         mock_twt_hub.bot.get_channel.return_value = mock_channel
         mock_twt_hub.bot.get_guild.return_value.roles = [mock_role]
-        mock_emoji1 = MagicMock(__str__=lambda self: ":LukaStamp:")
-        mock_emoji1.name = "LukaStamp"
-        mock_emoji2 = MagicMock(__str__=lambda self: ":AkitoStamp:")
-        mock_emoji2.name = "AkitoStamp"
-        mock_emoji3 = MagicMock(__str__=lambda self: ":RuiStamp:")
-        mock_emoji3.name = "RuiStamp"
-        mock_emoji4 = MagicMock(__str__=lambda self: ":EnaStamp:")
-        mock_emoji4.name = "EnaStamp"
-        mock_twt_hub.bot.get_guild.return_value.emojis = [mock_emoji1, mock_emoji2, mock_emoji3, mock_emoji4]
+        mock_emoji1 = MagicMock(__str__=lambda self: ":HonamiStamp:")
+        mock_emoji1.name = "HonamiStamp"
+        mock_emoji2 = MagicMock(__str__=lambda self: ":AiriStamp:")
+        mock_emoji2.name = "AiriStamp"
+        mock_emoji3 = MagicMock(__str__=lambda self: ":ShizukuStamp:")
+        mock_emoji3.name = "ShizukuStamp"
+        mock_emoji4 = MagicMock(__str__=lambda self: ":MafuyuStamp:")
+        mock_emoji4.name = "MafuyuStamp"
+        mock_emoji5 = MagicMock(__str__=lambda self: ":MeikoStamp:")
+        mock_emoji5.name = "MeikoStamp"
+        mock_twt_hub.bot.get_guild.return_value.emojis = [mock_emoji1, mock_emoji2, mock_emoji3, mock_emoji4, mock_emoji5]
 
         await mock_twt_hub.broadcast_tweets_to_channel()
 
         expected_message = (
             "# Shuffle Unit Week 138 has been announced!\n\n"
-            "Reach deathmatch to earn a shuffle unit stamp :AkitoStamp: "
-            ":RuiStamp: :EnaStamp: :LukaStamp:!\n\n"
+            "Reach deathmatch to earn a shuffle unit stamp :HonamiStamp: "
+            ":AiriStamp: :ShizukuStamp: :MafuyuStamp: :MeikoStamp:!\n\n"
             "@prskcgl tweeted https://x.com/prskcgl/status/1234567890\n@Week Announcement Ping"
         )
 
