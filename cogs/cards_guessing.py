@@ -12,10 +12,10 @@ from views.buttons import Buttons
 from storage.card_storage import CardStorage
 from storage.character_storage import CharacterStorage
 from utility.utility_functions import *
+from utility.constants import *
 
 # ty kana5 mafuyu for joining the gang
 VERTICAL_CARDS = ["res013_no033", "res014_no034", "res015_no033", "res016_no033", "res018_no044"] 
-from utility.constants import *
 
 class CardsGuessing(commands.Cog):
     def __init__(self, bot):
