@@ -137,7 +137,7 @@ class SongJacketGuessing(commands.Cog):
             active_session[ctx.channel_id] = False
             return True
         else:
-            # Find a song that matches the incorrect guess
+            # find a song that matches the incorrect guess
             temp = next((s["romaji_name"] for s in song_list_filtered_by_unit if
                          guessed_song in s["aliases"] or guessed_song == s[
                              "romaji_name"].lower() or guessed_song == sub(pattern=PATTERN, repl=" ", string=s[

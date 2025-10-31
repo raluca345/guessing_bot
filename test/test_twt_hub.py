@@ -81,7 +81,7 @@ class TestTwtHub:
 
     @pytest.fixture
     def mock_channel(self):
-        mock_channel = MagicMock()  # Not AsyncMock
+        mock_channel = MagicMock()
         mock_channel.id = WEEK_ANNOUNCEMENT_CHANNEL
         mock_channel.name = "twt"
         mock_channel.permissions_for.return_value = MagicMock(

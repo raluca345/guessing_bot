@@ -22,7 +22,6 @@ class Lb(commands.Cog):
         self.leaderboard_update.start()
 
     async def on_right_guess(self, user_id):
-        # gets all user ids
         user_ids = [x["user_id"] for x in self.lb_user_list]
         if user_id not in user_ids:
             self.lb_user_list.append({"user_id": user_id, "points": 1})
@@ -66,7 +65,7 @@ class Lb(commands.Cog):
             embed = discord.Embed(title="Guessing Leaderboard", color=discord.Color.teal())
             leaderboard_content = "```"  # Start a code block for monospaced formatting
 
-            max_points_length = len(str(self.lb_user_list[0]["points"]))  # Get the length of the highest score
+            max_points_length = len(str(self.lb_user_list[0]["points"]))
 
             for idx, user in enumerate(self.lb_user_list[page * per_page:(page + 1) * per_page],
                                     start=page * per_page + 1):
@@ -75,13 +74,12 @@ class Lb(commands.Cog):
 
                 user_obj = await self.bot.fetch_user(user_id)
                 user_name = user_obj.name
-                # Avoid accidental italics in the leaderboard
+                # avoid accidental italics in the leaderboard
                 index = user_name.find("_")
 
                 if index != -1:
                     user_name = user_name[:index] + "\\" + user_name[index:]
 
-                # Replace numbers with emojis for the top 3 on the first page
                 if page == 0:
                     if idx == 1:
                         position = "🥇"
@@ -96,7 +94,7 @@ class Lb(commands.Cog):
 
                 leaderboard_content += f"{position} {user_name} - {points} points\n"
 
-            leaderboard_content += "```"  # End the code block
+            leaderboard_content += "```" 
             embed.add_field(name="Leaderboard", value=leaderboard_content, inline=False)
             embed.set_footer(text="Updates every 10 minutes")
 

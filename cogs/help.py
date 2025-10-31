@@ -9,14 +9,11 @@ class Help(commands.Cog):
         self.bot = bot
 
     def collect_commands(self):
-        #Collect all commands and subcommands, and return a lst of pages for the paginator.
         all_commands = []
 
-        # Collect all commands and subcommands into a lst of dictionaries
         for command in self.bot.application_commands:
             all_commands.extend(self.collect_command_info(command))
 
-        # Create a lst of embeds for each page
         help_embeds = []
         total_pages = (len(all_commands) - 1) // COMMANDS_PER_PAGE + 1
 
@@ -35,7 +32,6 @@ class Help(commands.Cog):
         return help_embeds
 
     def collect_command_info(self, command, parent_name=""):
-        #Helper function to collect command information.
         full_name = f"{parent_name} {command.name}".strip()
         app_commands = []
 

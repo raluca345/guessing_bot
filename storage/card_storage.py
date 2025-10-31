@@ -20,10 +20,6 @@ class CardStorage:
         rows = self.cursor.fetchall()
 
         for row in rows:
-            #logger.info(row)
             if not row or row == {}:
                 continue
             self.card_data.append(row)
-
-# card_storage = CardStorage()
-# logger.info(card_storage.card_data)

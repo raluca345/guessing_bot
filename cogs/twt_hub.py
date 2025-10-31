@@ -30,9 +30,9 @@ class TwtHub(commands.Cog):
     def initialize_twitter_client():
         client = None
         try:
-            bearer_token = os.getenv('BEARER_TOKEN_2')
+            bearer_token = os.getenv('BEARER_TOKEN')
             if not bearer_token:
-                raise ValueError("BEARER_TOKEN_2 is not set in the environment variables.")
+                raise ValueError("BEARER_TOKEN is not set in the environment variables.")
             client = tweepy.asynchronous.AsyncClient(bearer_token=bearer_token, wait_on_rate_limit=True)
             return client
         except Exception as e:
@@ -45,6 +45,12 @@ class TwtHub(commands.Cog):
                 character_name = name
                 break
 
+        if character_name == "MEIKO":
+            character_name = "Meiko"
+
+        if character_name == "KAITO":
+            character_name = "Kaito"
+
         emoji_name = f"{character_name}Stamp"
         emoji = discord.utils.get(server.emojis, name=emoji_name)
         message = (f"# Week {week_number} has been announced!"
@@ -56,6 +62,15 @@ class TwtHub(commands.Cog):
         character_names = [name for name in self.character_names if name in character_names_line]
         logger.info("Character names: %s", character_names)
         emoji_names = [f"{name}Stamp" for name in character_names]
+
+        for name in character_names:
+            if name == "MEIKO":
+                emoji_names.append("MeikoStamp")
+                emoji_names.remove("MEIKOStamp")
+            if name == "KAITO":
+                emoji_names.append("KaitoStamp")
+                emoji_names.remove("KAITOStamp")
+
         emojis = [discord.utils.get(server.emojis, name=name) for name in emoji_names]
         logger.info("Emojis: %s", emojis)
         message = (f"# Week {week_number} has been announced!"
@@ -89,6 +104,15 @@ class TwtHub(commands.Cog):
         if unit_name in self.units:
             character_names = self.unit_to_character_names[unit_name]
             emoji_names = [f"{name}Stamp" for name in character_names]
+
+            for name in character_names:
+                if name == "MEIKO":
+                    emoji_names.append("MeikoStamp")
+                    emoji_names.remove("MEIKOStamp")
+                if name == "KAITO":
+                    emoji_names.append("KaitoStamp")
+                    emoji_names.remove("KAITOStamp")
+
             logger.info(f"Emoji names: {emoji_names}")
             emojis = [discord.utils.get(server.emojis, name=name) for name in emoji_names]
             message = (f"# {unit_name} Unit Week {week_number} has been announced!"
@@ -106,7 +130,7 @@ class TwtHub(commands.Cog):
                    f"\n\n@prskcgl tweeted {tweet_url}\n{role.mention}")
         return message
 
-    @tasks.loop(time=datetime.time(hour=13, minute=5))
+    @tasks.loop(time=datetime.time(hour=13, minute=1))
     async def broadcast_tweets_to_channel(self):
         if self.client:
             logger.info(self.bot.guilds)
@@ -135,7 +159,7 @@ class TwtHub(commands.Cog):
                             message = self.handle_everyone_week(week_number, tweet_url, role)
 
                         elif "Shuffle" in first_line_in_twt:
-                            # 2 "weeks" so look for the second one, the number is after that one
+                            # "week" appears twice so look for the second one, the week number is after that one
                             # looks crappy so might change later
                             week_position = first_line_in_twt.index("Week", week_position + 1)
                             week_number = first_line_in_twt[week_position + 1]
@@ -178,7 +202,6 @@ class TwtHub(commands.Cog):
                 logger.error(f"Connection error fetching tweets: {e}")
                 logger.error("Could not fetch tweets.")
             except tweepy.TweepyException as e:
-                # Log the headers in case of a TweepyException
                 if e.response:
                     logger.error(f"Tweepy error: {e}")
                     logger.error(f"Response Headers: {e.response.headers}")

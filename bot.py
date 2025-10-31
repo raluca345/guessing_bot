@@ -1,27 +1,21 @@
 import os
 
-import aiohttp
 import discord
-import tweepy.asynchronous
 from discord.ext import tasks
 from dotenv import load_dotenv
 
 from utility.utility_functions import logger, active_session
 from utility.constants import *
 
-# Set up intents
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 
-# Initialize the bot
 bot = discord.Bot(intents=intents, activity=discord.Game(name="Guessing cards and songs"))
 
-# List of cogs to be loaded
 cogs_list = [f.split(".")[0] for f in os.listdir(os.getcwd() + "/cogs") if not f.startswith("__")]
 logger.info(cogs_list)
 
-# Load each cog
 for cog in cogs_list:
     bot.load_extension(f'cogs.{cog}')
 
@@ -38,7 +32,6 @@ async def on_command_error(ctx: discord.ApplicationContext, error):
     
     if isinstance(error, discord.NotFound):
         logger.error(f"Interaction not found in channel {ctx.channel_id}: {error}")
-        # Can't use followup since interaction is unknown, try regular channel send
         try:
             await ctx.channel.send("The interaction timed out. Please try the command again.", ephemeral=True)
         except discord.Forbidden:
@@ -52,7 +45,6 @@ async def on_command_error(ctx: discord.ApplicationContext, error):
         try:
             await ctx.followup.send("A network error occurred. Please try again!", ephemeral=True)
         except:
-            # If followup fails, try regular channel send
             try:
                 await ctx.channel.send("A network error occurred. Please try again!", ephemeral=True)
             except:
@@ -61,7 +53,6 @@ async def on_command_error(ctx: discord.ApplicationContext, error):
         try:
             await ctx.followup.send("Something went wrong, please try again!", ephemeral=True)
         except:
-            # If followup fails, try regular channel send
             try:
                 await ctx.channel.send("Something went wrong, please try again!", ephemeral=True)
             except:

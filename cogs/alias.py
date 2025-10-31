@@ -3,6 +3,7 @@ from discord.ext import commands
 
 from storage.character_storage import CharacterStorage
 from storage.song_storage import SongStorage
+from utility.constants import OWNER_ID
 
 
 class Alias(commands.Cog):
@@ -30,22 +31,22 @@ class Alias(commands.Cog):
 
 
     @alias.command(name="suggestsong", description="Suggest a song alias!")
-    async def alias_suggest_song(self, ctx, song: discord.Option(str, autocomplete=song_name_autocomplete), a: str):
-        me = await self.bot.fetch_user(599999906039726090)
+    async def alias_suggest_song(self, ctx, song: discord.Option(str, autocomplete=song_name_autocomplete), a: str): #type: ignore
+        me = await self.bot.fetch_user(OWNER_ID)
         user = await self.bot.fetch_user(ctx.author.id)
         await me.send(f"User `{user.name}` sent an alias suggestion for the song **{song}**: **{a}**")
         await ctx.respond("Your suggestion has been sent!")
 
     @alias.command(name="viewcharacter", description="View a character's aliases")
-    async def alias_view_chara(self, ctx, character: discord.Option(str, autocomplete=chara_name_autocomplete)):
+    async def alias_view_chara(self, ctx, character: discord.Option(str, autocomplete=chara_name_autocomplete)): #type: ignore
         e = discord.Embed(title=f"{character} Aliases", color=discord.Color.fuchsia())
         val = next((c["aliases"] for c in self.character_list.characters_data if c["characterName"] == character))
         e.add_field(name="", value=f"```{val}```")
         await ctx.respond(embed=e)
 
     @alias.command(name="suggestcharacter", description="Suggest a character alias!")
-    async def alias_suggest_character(self, ctx, character: discord.Option(str, autocomplete=chara_name_autocomplete), a: str):
-        me = await self.bot.fetch_user(599999906039726090)
+    async def alias_suggest_character(self, ctx, character: discord.Option(str, autocomplete=chara_name_autocomplete), a: str): #type: ignore
+        me = await self.bot.fetch_user(OWNER_ID)
         user = await self.bot.fetch_user(ctx.author.id)
         await me.send(f"User `{user.name}` sent an alias suggestion for the character **{character}**: **{a}**")
         await ctx.respond("Your suggestion has been sent!")
