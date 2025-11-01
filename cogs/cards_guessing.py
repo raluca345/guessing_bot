@@ -15,7 +15,7 @@ from utility.utility_functions import *
 from utility.constants import *
 
 # ty kana5 mafuyu for joining the gang
-VERTICAL_CARDS = ["res013_no033", "res014_no034", "res015_no033", "res016_no033", "res018_no044"] 
+VERTICAL_CARDS = ["res013_no033", "res014_no034", "res015_no033", "res016_no033", "res018_no044"]
 
 class CardsGuessing(commands.Cog):
     def __init__(self, bot):
@@ -31,6 +31,7 @@ class CardsGuessing(commands.Cog):
         self.birthday2_list = birthday2_filter(self.card_list.card_data)
         self.birthday3_list = birthday3_filter(self.card_list.card_data)
         self.birthday4_list = birthday4_filter(self.card_list.card_data)
+        self.no_two_stars_list = no_two_star_filter(self.card_list.card_data)
         self.VERTICAL_CARDS = ["res013_no033", "res014_no034", "res015_no033", "res016_no033", "res018_no044"]
         load_dotenv()
         self.s3 = connect_to_r2_storage()
@@ -215,6 +216,16 @@ class CardsGuessing(commands.Cog):
         active_session[ctx.channel_id] = True
         await ctx.defer()
         await self.card_guess_helper(ctx, self.three_stars_list)
+        active_session[ctx.channel_id] = False
+
+    @cards.command(name="notwostarguess", description="Guess from all cards that aren't 2*!")
+    async def guess_no_two_star(self, ctx):
+        if active_session[ctx.channel_id]:
+            await ctx.respond('Guessing has already started!')
+            return
+        active_session[ctx.channel_id] = True
+        await ctx.defer()
+        await self.card_guess_helper(ctx, self.no_two_stars_list)
         active_session[ctx.channel_id] = False
 
     @cards.command(name="twostarguess", description="Guess from all 2* cards!")

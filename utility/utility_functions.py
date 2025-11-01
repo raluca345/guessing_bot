@@ -118,6 +118,11 @@ def three_star_filter(cards):
     return filtered_cards
 
 
+def no_two_star_filter(cards):
+    filtered_cards = [c for c in cards if c["card_rarity_type"] != "rarity_2"]
+    return filtered_cards
+
+
 def two_star_filter(cards):
     filtered_cards = [c for c in cards if c["card_rarity_type"] == "rarity_2"]
     return filtered_cards
