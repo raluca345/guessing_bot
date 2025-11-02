@@ -81,5 +81,3 @@ async def check_server_permissions(channel_id):
 
 
 bot.run(os.getenv("TOKEN"))
-
-# TODO: create a README.md file
