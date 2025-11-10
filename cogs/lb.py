@@ -15,18 +15,19 @@ class Lb(commands.Cog):
         self.lb_user_list = []
         self.pages = []
         self.leaderboard = Leaderboard()
+        self._update_lock = asyncio.Lock()
 
     @commands.Cog.listener()
     async def on_ready(self):
         await asyncio.sleep(600)
-        self.leaderboard_update.start()
+        if not self.leaderboard_update.is_running():
+            self.leaderboard_update.start()
 
     async def on_right_guess(self, user_id):
         user_ids = [x["user_id"] for x in self.lb_user_list]
         if user_id not in user_ids:
             self.lb_user_list.append({"user_id": user_id, "points": 1})
         else:
-            # gets the dict that has user_id as key
             temp = next((x for x in self.lb_user_list if x["user_id"] == user_id))
             temp["points"] += 1
         logger.info(self.lb_user_list)
@@ -41,46 +42,72 @@ class Lb(commands.Cog):
 
     @tasks.loop(minutes=10)
     async def leaderboard_update(self):
-        self.pages = await self.create_lb()
-        self.lb_user_list = []
-        logger.info("Updated db!")
+        async with self._update_lock:
+            self.pages = []
+            self.pages = await self.create_lb()
+            self.lb_user_list = []
+            logger.info("Updated db!")
 
     @leaderboard_update.after_loop
     async def on_leaderboard_update_cancel(self):
         if self.leaderboard_update.is_being_cancelled() and len(self.lb_user_list) != 0:
-            await self.create_lb()
-            logger.info("Updated db!")
+            async with self._update_lock:
+                await self.create_lb()
+                self.lb_user_list = []
+                logger.info("Updated db!")
 
     async def create_lb(self):
         pages = []
-        self.leaderboard.add_users(self.lb_user_list)
+        deltas = [{"user_id": u["user_id"], "points": u["points"]} for u in self.lb_user_list]
+        if deltas:
+            self.leaderboard.add_users(deltas)
+
         self.leaderboard.get_data()
-        self.lb_user_list = self.leaderboard.user_lb
-        self.lb_user_list = sorted(self.lb_user_list, key=lambda x: x["points"], reverse=True)
+        db_users = sorted(list(self.leaderboard.user_lb), key=lambda x: x["points"], reverse=True)
+
+        filtered_users = []
+        for u in db_users:
+            user_id = u["user_id"]
+            points = u["points"]
+            try:
+                user_obj = self.bot.get_user(user_id)
+                if user_obj is None:
+                    try:
+                        user_obj = await self.bot.fetch_user(user_id)
+                    except discord.NotFound:
+                        logger.warning(f"[create_lb] User not found or not visible to bot: {user_id}")
+                        user_name = f"UnknownUser_{user_id}"
+                    else:
+                        user_name = user_obj.name
+                else:
+                    user_name = user_obj.name
+
+            except Exception as e:
+                logger.exception(f"[create_lb] Failed fetching user {user_id}: {e}")
+                user_name = f"UnknownUser_{user_id}"
+
+            index = user_name.find("_")
+            if index != -1:
+                display_name = user_name[:index] + "\\" + user_name[index:]
+            else:
+                display_name = user_name
+
+            filtered_users.append({"user_id": user_id, "points": points, "display_name": display_name})
 
         per_page = 10
-        total_pages = math.ceil(len(self.lb_user_list) / per_page)
+        total_pages = math.ceil(len(filtered_users) / per_page) if filtered_users else 1
 
-        for page in range(total_pages):
+        for page_idx in range(total_pages):
             embed = discord.Embed(title="Guessing Leaderboard", color=discord.Color.teal())
-            leaderboard_content = "```"  # Start a code block for monospaced formatting
+            leaderboard_content = ""
 
-            max_points_length = len(str(self.lb_user_list[0]["points"]))
-
-            for idx, user in enumerate(self.lb_user_list[page * per_page:(page + 1) * per_page],
-                                    start=page * per_page + 1):
+            for idx, user in enumerate(filtered_users[page_idx * per_page:(page_idx + 1) * per_page],
+                                    start=page_idx * per_page + 1):
                 user_id = user["user_id"]
                 points = user["points"]
+                user_name = user["display_name"]
 
-                user_obj = await self.bot.fetch_user(user_id)
-                user_name = user_obj.name
-                # avoid accidental italics in the leaderboard
-                index = user_name.find("_")
-
-                if index != -1:
-                    user_name = user_name[:index] + "\\" + user_name[index:]
-
-                if page == 0:
+                if page_idx == 0:
                     if idx == 1:
                         position = "🥇"
                     elif idx == 2:
@@ -94,7 +121,9 @@ class Lb(commands.Cog):
 
                 leaderboard_content += f"{position} {user_name} - {points} points\n"
 
-            leaderboard_content += "```" 
+            if not leaderboard_content:
+                leaderboard_content = "No entries"
+
             embed.add_field(name="Leaderboard", value=leaderboard_content, inline=False)
             embed.set_footer(text="Updates every 10 minutes")
 

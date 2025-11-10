@@ -33,6 +33,14 @@ class Leaderboard:
         self.cursor.executemany(query, user_list)
         self.connection.commit()
 
+    def delete_user(self, user_id):
+        try:
+            query = "DELETE FROM leaderboard WHERE user_id = %s"
+            self.cursor.execute(query, (user_id,))
+            self.connection.commit()
+        except Exception:
+            pass
+
     @staticmethod
     async def lb_pages(ctx: discord.ApplicationContext, pages: list[Embed]):
         paginator = Paginator(pages=pages)

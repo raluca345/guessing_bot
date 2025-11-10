@@ -1,6 +1,9 @@
 import os
+import io
+import csv
 
 import discord
+import asyncio
 from discord.ext import tasks
 from dotenv import load_dotenv
 
@@ -9,6 +12,8 @@ from utility.constants import *
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.messages = True
+intents.dm_messages = True
 intents.guilds = True
 
 bot = discord.Bot(intents=intents, activity=discord.Game(name="Guessing cards and songs"))
@@ -68,6 +73,7 @@ async def reload(ctx, cog_name: discord.Option(choices=cogs_list)): #type: ignor
         await ctx.respond(f"Reloaded the {cog_name} cog", ephemeral=True)
     else:
         await ctx.respond("Couldn't find a cog with that name!", ephemeral=True)
+
 
 load_dotenv()
 
