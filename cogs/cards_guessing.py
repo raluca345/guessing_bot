@@ -100,8 +100,20 @@ class CardsGuessing(commands.Cog):
             logger.error(f"Error fetching image from R2: {e}")
             user = await self.bot.fetch_user(OWNER_ID)
             await user.send("Error fetching card from R2")
-            await ctx.respond("Could not fetch a card at this time, please try again later!")
-            active_session[ctx.channel_id] = False
+            try:
+                if isinstance(ctx, discord.Interaction):
+                    await ctx.followup.send("Could not fetch a card at this time, please try again later!")
+                    ch_id = getattr(ctx, "channel_id", None) or (ctx.channel.id if ctx.channel else None)
+                else:
+                    if getattr(ctx, "interaction", None) and ctx.interaction.response.is_done():
+                        await ctx.followup.send("Could not fetch a card at this time, please try again later!")
+                    else:
+                        await ctx.respond("Could not fetch a card at this time, please try again later!")
+                    ch_id = ctx.channel_id
+                if ch_id is not None:
+                    active_session[ch_id] = False
+            except Exception:
+                logger.exception("Failed to notify user about R2 fetch error")
             return
 
         if card["assetbundle_name"] in self.VERTICAL_CARDS and card_type == "card_after_training.png":
@@ -120,10 +132,22 @@ class CardsGuessing(commands.Cog):
             image_binary.seek(0)
             picture = discord.File(fp=image_binary, filename="card.png")
             try:
-                await ctx.respond(file=picture)
+                if isinstance(ctx, discord.Interaction):
+                    await ctx.followup.send(file=picture)
+                else:
+                    if getattr(ctx, "interaction", None) and ctx.interaction.response.is_done():
+                        await ctx.followup.send(file=picture)
+                    else:
+                        await ctx.respond(file=picture)
             except discord.errors.NotFound:
-                await ctx.send("Something went wrong, try again!")
-                active_session[ctx.channel_id] = False
+                if isinstance(ctx, discord.Interaction):
+                    await ctx.channel.send("Something went wrong, try again!")
+                    ch_id = getattr(ctx, "channel_id", None) or (ctx.channel.id if ctx.channel else None)
+                else:
+                    await ctx.send("Something went wrong, try again!")
+                    ch_id = ctx.channel_id
+                if ch_id is not None:
+                    active_session[ch_id] = False
                 return
 
             image_binary.truncate(0)
@@ -143,60 +167,85 @@ class CardsGuessing(commands.Cog):
                 if is_finished:
                     break
             except asyncio.TimeoutError:
-                await ctx.followup.send(
-                    f"Time's up! It was **{character['characterLastName']}  {character['characterName']}** - **{card_name}**!",
-                    file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
+                if isinstance(ctx, discord.Interaction):
+                    await ctx.followup.send(
+                        f"Time's up! It was **{character['characterLastName']}  {character['characterName']}** - **{card_name}**!",
+                        file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
+                else:
+                    await ctx.followup.send(
+                        f"Time's up! It was **{character['characterLastName']}  {character['characterName']}** - **{card_name}**!",
+                        file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
                 break
 
     async def check_guess(self, ctx, guess, character, card_name, answer, leaderboard, filtered_cards_list):
-        all_character_aliases_but_the_right_one = [a for c in self.character_list.characters_data for a 
-                                                   in c["aliases"]
-                                                   if c["characterName"] != character["characterName"]]
-        all_character_names_but_the_right_one = [c["characterName"].lower() for c
-                                                in self.character_list.characters_data 
-                                                if c["characterName"] != character["characterName"]]
-        if guess.content.lower().strip() == character[
-            "characterName"].lower() or guess.content.lower().strip() in \
-                character["aliases"] or guess.content.lower().strip("-").strip() in character[
-            "aliases"] or guess.content.lower().strip("-").strip() == character["characterName"].lower():
-            await ctx.followup.send(
-                f'Congrats {guess.author.mention}! You guessed **{character["characterLastName"] + " " + character["characterName"]}** - **{card_name}** correctly!',
-                file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
-            user_id = guess.author.id
-            if leaderboard is not None:
-                await leaderboard.on_right_guess(user_id)
+        try:
+            all_character_aliases_but_the_right_one = [a for c in self.character_list.characters_data for a 
+                                                    in c["aliases"]
+                                                    if c["characterName"] != character["characterName"]]
+            all_character_names_but_the_right_one = [c["characterName"].lower() for c
+                                                    in self.character_list.characters_data 
+                                                    if c["characterName"] != character["characterName"]]
+            if guess.content.lower().strip() == character[
+                "characterName"].lower() or guess.content.lower().strip() in \
+                    character["aliases"] or guess.content.lower().strip("-").strip() in character[
+                "aliases"] or guess.content.lower().strip("-").strip() == character["characterName"].lower():
+                if isinstance(ctx, discord.Interaction):
+                    await ctx.followup.send(
+                        f'Congrats {guess.author.mention}! You guessed **{character["characterLastName"] + " " + character["characterName"]}** - **{card_name}** correctly!',
+                        file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
+                else:
+                    await ctx.followup.send(
+                        f'Congrats {guess.author.mention}! You guessed **{character["characterLastName"] + " " + character["characterName"]}** - **{card_name}** correctly!',
+                        file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
+                user_id = guess.author.id
+                if leaderboard is not None:
+                    await leaderboard.on_right_guess(user_id)
+                else:
+                    await ctx.followup.send("Error updating lb")
+                    logger.error("Error updating lb")
+                return True
+            elif guess.content.lower().strip() == "endguess":
+                if isinstance(ctx, discord.Interaction):
+                    await ctx.followup.send(
+                        f'Giving up? It was **{character["characterLastName"] + " " + character["characterName"]}** - **{card_name}**!',
+                        file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
+                else:
+                    await ctx.followup.send(
+                        f'Giving up? It was **{character["characterLastName"] + " " + character["characterName"]}** - **{card_name}**!',
+                        file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
+                return True
             else:
-                await ctx.followup.send("Error updating lb")
-                logger.error("Error updating lb")
-            return True
-        elif guess.content.lower().strip() == "endguess":
-            await ctx.followup.send(
-                f'Giving up? It was **{character["characterLastName"] + " " + character["characterName"]}** - **{card_name}**!',
-                file=answer, view=Buttons(ctx, ["Play Again"], self.card_guess_helper, [filtered_cards_list]))
-            return True
-        else:
-            if guess.content.lower().strip() in all_character_aliases_but_the_right_one or guess.content.lower().strip() in all_character_names_but_the_right_one or guess.content.lower().strip(
-                    "-").strip() in all_character_names_but_the_right_one or guess.content.lower().strip(
-                "-").strip() in all_character_aliases_but_the_right_one:
-                wrong_chara_last_name = next(
-                    (c["characterLastName"] for c in self.character_list.characters_data if
-                     guess.content.lower().strip() in c["aliases"] or guess.content.lower().strip(
-                         "-").strip() in c[
-                         "aliases"] or guess.content.lower().strip() == c[
-                         "characterName"].lower() or guess.content.lower().strip("-").strip() == c[
-                         "characterName"].lower()), "")
-                wrong_chara_name = next((c["characterName"] for c in self.character_list.characters_data if
-                                         guess.content.lower().strip() in c[
-                                             "aliases"] or guess.content.lower().strip() == c[
-                                             "characterName"].lower() or guess.content.lower().strip(
-                                             "-").strip() in c["aliases"] or guess.content.lower().strip(
-                                             "-").strip() == c["characterName"].lower()))
-                await ctx.followup.send(
-                    f"Nope, it's not **{wrong_chara_last_name} {wrong_chara_name}**")
-                return False
-            else:
-                await ctx.send('Nope, try again!')
-                return False
+                if guess.content.lower().strip() in all_character_aliases_but_the_right_one or guess.content.lower().strip() in all_character_names_but_the_right_one or guess.content.lower().strip(
+                        "-").strip() in all_character_names_but_the_right_one or guess.content.lower().strip(
+                    "-").strip() in all_character_aliases_but_the_right_one:
+                    wrong_chara_last_name = next(
+                        (c["characterLastName"] for c in self.character_list.characters_data if
+                        guess.content.lower().strip() in c["aliases"] or guess.content.lower().strip(
+                            "-").strip() in c[
+                            "aliases"] or guess.content.lower().strip() == c[
+                            "characterName"].lower() or guess.content.lower().strip("-").strip() == c[
+                            "characterName"].lower()), "")
+                    wrong_chara_name = next((c["characterName"] for c in self.character_list.characters_data if
+                                            guess.content.lower().strip() in c[
+                                                "aliases"] or guess.content.lower().strip() == c[
+                                                "characterName"].lower() or guess.content.lower().strip(
+                                                "-").strip() in c["aliases"] or guess.content.lower().strip(
+                                                "-").strip() == c["characterName"].lower()))
+                    if isinstance(ctx, discord.Interaction):
+                        await ctx.followup.send(
+                            f"Nope, it's not **{wrong_chara_last_name} {wrong_chara_name}**")
+                    else:
+                        await ctx.followup.send(
+                            f"Nope, it's not **{wrong_chara_last_name} {wrong_chara_name}**")
+                    return False
+                else:
+                    if isinstance(ctx, discord.Interaction):
+                        await ctx.channel.send('Nope, try again!')
+                    else:
+                        await ctx.send('Nope, try again!')
+                    return False
+        except discord.HTTPException:
+            logger.error("Button timed out")
 
     @cards.command(name="fourstarguess", description="Guess from all 4* cards!")
     async def guess_four_star(self, ctx):

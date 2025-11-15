@@ -1,9 +1,6 @@
 import os
-import io
-import csv
 
 import discord
-import asyncio
 from discord.ext import tasks
 from dotenv import load_dotenv
 

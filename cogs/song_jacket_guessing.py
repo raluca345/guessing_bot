@@ -30,15 +30,20 @@ class SongJacketGuessing(commands.Cog):
         self.update_song_list.start()
 
     @discord.slash_command(name="songjacketguess", description="Guess the song from a crop of its jacket!")
-    async def song_jacket_guess(self, ctx, unit: discord.Option(str, choices=UNITS)):  # type: ignore
+    async def song_jacket_guess(self, ctx: discord.ApplicationContext, unit: discord.Option(str, choices=UNITS)):  # type: ignore
         song_list_filtered_by_unit = []
-        if active_session[ctx.channel_id]:
-            await ctx.respond('Guessing has already started!')
+        ch_id = (ctx.channel.id if isinstance(ctx, discord.Interaction) else ctx.channel_id)
+        if active_session[ch_id]:
+            if isinstance(ctx, discord.Interaction):
+                await ctx.followup.send('Guessing has already started!')
+            else:
+                await ctx.respond('Guessing has already started!')
             return
-        active_session[ctx.channel_id] = True
+        active_session[ch_id] = True
 
-        if not ctx.interaction.response.is_done():
-            await ctx.defer()
+        if not isinstance(ctx, discord.Interaction):
+            if not ctx.interaction.response.is_done():
+                await ctx.defer()
 
         leaderboard = self.bot.get_cog("Lb")
 
@@ -55,7 +60,10 @@ class SongJacketGuessing(commands.Cog):
         if not song_name_list:
             user = await self.bot.fetch_user(OWNER_SERVER_ID)
             await user.send("Couldn't fetch songs, please check the database")
-            await ctx.respond("Could not fetch songs at this time, please try again later!")
+            if isinstance(ctx, discord.Interaction) or (not isinstance(ctx, discord.Interaction) and ctx.interaction.response.is_done()):
+                await ctx.followup.send("Could not fetch songs at this time, please try again later!")
+            else:
+                await ctx.respond("Could not fetch songs at this time, please try again later!")
             return
         song = random.choice(song_list_filtered_by_unit)
         song["aliases"] = [sub(pattern=PATTERN, repl="", string=s.lower()) for s in song["aliases"]]
@@ -75,15 +83,21 @@ class SongJacketGuessing(commands.Cog):
             logger.error(f"Error fetching image from R2: {e}")
             user = await self.bot.fetch_user(OWNER_ID)
             await user.send("Error fetching song jacket from R2")
-            await ctx.respond("Could not fetch a song jacket at this time, please try again later!")
-            active_session[ctx.channel_id] = False
+            if isinstance(ctx, discord.Interaction) or (not isinstance(ctx, discord.Interaction) and ctx.interaction.response.is_done()):
+                await ctx.followup.send("Could not fetch a song jacket at this time, please try again later!")
+            else:
+                await ctx.respond("Could not fetch a song jacket at this time, please try again later!")
+            active_session[ch_id] = False
             return
         region = generate_img_crop(img, SONG_JACKET_CROP_SIZE)
         with BytesIO() as image_binary:
             region.save(image_binary, 'PNG', quality=95, optimize=True)
             image_binary.seek(0)
             picture = discord.File(fp=image_binary, filename="jacket.png")
-            await ctx.respond(file=picture)
+            if isinstance(ctx, discord.Interaction) or (not isinstance(ctx, discord.Interaction) and ctx.interaction.response.is_done()):
+                await ctx.followup.send(file=picture)
+            else:
+                await ctx.respond(file=picture)
 
             image_binary.truncate(0)
             image_binary.seek(0)
@@ -106,7 +120,7 @@ class SongJacketGuessing(commands.Cog):
                 logger.info(unit)
                 await ctx.followup.send(f"Time's up! The song was **{tmp}**!", file=answer,
                                         view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit]))
-                active_session[ctx.channel_id] = False
+                active_session[ch_id] = False
                 break
 
     async def check_guess(self, ctx, guess, song, answer, song_list_filtered_by_unit, leaderboard, unit):

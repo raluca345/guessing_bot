@@ -60,7 +60,10 @@ class LyricsGuessing(commands.Cog):
         if not song_name_list:
             user = await self.bot.fetch_user(OWNER_SERVER_ID)
             await user.send("Couldn't fetch songs, please check the database")
-            await ctx.respond("Could not fetch songs at this time, please try again later!")
+            if isinstance(ctx, discord.Interaction) or (not isinstance(ctx, discord.Interaction) and ctx.interaction.response.is_done()):
+                await ctx.followup.send("Could not fetch songs at this time, please try again later!")
+            else:
+                await ctx.respond("Could not fetch songs at this time, please try again later!")
             return
 
         song_list_filtered_by_unit = [
@@ -82,7 +85,10 @@ class LyricsGuessing(commands.Cog):
 
         logger.info(jacket_key)
 
-        await ctx.respond(song_lyric)
+        if isinstance(ctx, discord.Interaction) or (not isinstance(ctx, discord.Interaction) and ctx.interaction.response.is_done()):
+            await ctx.followup.send(song_lyric)
+        else:
+            await ctx.respond(song_lyric)
         try:
             obj = self.s3.get_object(Bucket=self.BUCKET_NAME, Key=jacket_key)
             buffer = BytesIO(obj['Body'].read())
@@ -105,8 +111,12 @@ class LyricsGuessing(commands.Cog):
             logger.error(f"Error fetching image from R2: {e}")
             user = await self.bot.fetch_user(OWNER_ID)
             await user.send("Error fetching song jacket from R2")
-            await ctx.respond("Could not fetch a song jacket at this time, please try again later!")
-            active_session[ctx.channel_id] = False
+            if isinstance(ctx, discord.Interaction) or (not isinstance(ctx, discord.Interaction) and ctx.interaction.response.is_done()):
+                await ctx.followup.send("Could not fetch a song jacket at this time, please try again later!")
+            else:
+                await ctx.respond("Could not fetch a song jacket at this time, please try again later!")
+            ch_id = (ctx.channel.id if isinstance(ctx, discord.Interaction) else ctx.channel_id)
+            active_session[ch_id] = False
             return
 
         while True:
@@ -129,7 +139,7 @@ class LyricsGuessing(commands.Cog):
         guessed_song = guessed_song.strip()
 
         if guessed_song in song["aliases"] or guessed_song == song["romaji_name"].lower():
-            await ctx.followup.send(f"Congrats {ctx.author.mention}! You guessed **{song['romaji_name']}** correctly!",
+            await ctx.followup.send(f"Congrats {guess.author.mention}! You guessed **{song['romaji_name']}** correctly!",
                                     file=discord.File(fp=buffer, filename="jacket.png"),
                                     view=Buttons(ctx, ["Play Again"], self.guess_the_song,
                                                  ["romaji", song["unit"]]))

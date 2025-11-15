@@ -16,7 +16,14 @@ class Buttons(discord.ui.View):
         await interaction.response.defer()
         button.disabled = True
         button.label = "New Session Starting..."
-        original_message = await interaction.original_response()
-        new_content = original_message.content + "\nRestarting..."
-        await interaction.edit_original_response(content=new_content, view=self)
-        await self.callback(self.ctx, *self.callback_args)
+        try:
+            original_message = await interaction.original_response()
+            new_content = original_message.content + "\nRestarting..."
+            await interaction.edit_original_response(content=new_content, view=self)
+        except Exception:
+            logger.exception("Failed to edit original response before restarting session")
+        try:
+            # Use the fresh interaction so followup token is valid
+            await self.callback(interaction, *self.callback_args)
+        except Exception:
+            logger.exception("Error while starting new session from Play Again button")
