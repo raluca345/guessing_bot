@@ -20,6 +20,10 @@ class LyricsGuessing(commands.Cog):
         load_dotenv()
         self.s3 = connect_to_r2_storage()
         self.BUCKET_NAME = os.getenv("BUCKET_NAME")
+        try:
+            build_song_unit_cache(self.song_list.song_data)
+        except Exception:
+            logger.exception("Failed to build song unit cache at startup")
     def cog_unload(self) -> None:
         self.update_song_list.cancel()
 
@@ -33,13 +37,7 @@ class LyricsGuessing(commands.Cog):
     async def guess_the_song(self, ctx: discord.ApplicationContext, language, unit):
         leaderboard = self.bot.get_cog("Lb")
 
-        song_list_filtered_by_unit = []
-        if unit == "None":
-            song_list_filtered_by_unit = self.song_list.song_data
-        else:
-            for song in self.song_list.song_data:
-                if song["unit"] == unit:
-                    song_list_filtered_by_unit.append(song)
+        song_list_filtered_by_unit = filter_songs_by_unit(self.song_list.song_data, unit)
 
         lyrics = {}
         song_name_list = []
@@ -202,7 +200,11 @@ class LyricsGuessing(commands.Cog):
     @tasks.loop(hours=24)
     async def update_song_list(self):
         self.song_list.song_data = SongStorage()
-        logger.info("Updated song db!")
+        try:
+            build_song_unit_cache(self.song_list.song_data)
+        except Exception:
+            logger.exception("Failed to rebuild song unit cache on update")
+        logger.info("Updated song db and rebuilt cache!")
 
 def setup(bot):
     bot.add_cog(LyricsGuessing(bot))

@@ -14,6 +14,7 @@ from utility.constants import *
 import boto3
 from botocore.client import Config
 
+
 # db configuration
 
 config = configparser.ConfigParser()
@@ -156,6 +157,11 @@ def birthday4_filter(cards):
                       c["card_rarity_type"] == "rarity_birthday" and FIFTH_ANNI * 1000 > c["release_at"] > FOURTH_ANNI * 1000]
     return filtered_cards
 
+def birthday5_filter(cards):
+    filtered_cards = [c for c in cards if
+                      c["card_rarity_type"] == "rarity_birthday" and SIXTH_ANNI * 1000 > c["release_at"] > FIFTH_ANNI * 1000]
+    return filtered_cards
+
 
 def sanrio_filter(cards):
     filtered_cards = [c for c in cards if c["prefix"].strip().startswith("feat.")]
@@ -165,12 +171,19 @@ def sanrio_filter(cards):
 def unit_filter(cards, unit):
     if unit == "None":
         return None
-    filtered_cards = []
+    try:
+        unit_to_aliases = {u["unit"]: set(u["aliases"]) for u in unit_aliases}
+    except Exception:
+        unit_to_aliases = {}
 
-    unit_to_aliases = {u["unit"] : u["aliases"] for u in unit_aliases}
+    aliases_set = unit_to_aliases.get(unit, set())
+    char_id_list = character_id_to_unit.get(unit, [])
+    char_id_set = set(char_id_list)
 
-    # unit based filtering
-    filtered_cards = [card for card in cards if card["character_id"] in character_id_to_unit[unit] or card["support_unit"] in unit_to_aliases[unit]]
+    filtered_cards = [
+        card for card in cards
+        if card.get("character_id") in char_id_set or card.get("support_unit") in aliases_set
+    ]
 
     return filtered_cards
 
@@ -178,3 +191,136 @@ def unit_filter(cards, unit):
 def sanitize_file_name(file_name):
     """Remove or replace invalid characters in file names."""
     return re.sub(r'[<>:"/\\|?*]', '-', file_name)
+
+
+song_unit_cache = {}
+
+
+def build_song_unit_cache(songs):
+    """Precompute and store filtered song lists for each unit."""
+    global song_unit_cache
+    song_unit_cache = {}
+    try:
+        for u in UNITS:
+                if u == "None":
+                    song_unit_cache[u] = list(songs)
+                else:
+                    song_unit_cache[u] = [s for s in songs if s.get("unit") == u]
+        pass
+    except Exception:
+        song_unit_cache = {"None": list(songs)}
+    return song_unit_cache
+
+
+def clear_song_unit_cache():
+    """Clear the precomputed cache.
+
+    Use this before rebuilding or if you need to force recomputation.
+    """
+    global song_unit_cache
+    song_unit_cache.clear()
+
+
+def filter_songs_by_unit(songs, unit):
+    """Return a list of songs filtered by `unit`, using cache if available.
+
+    If the cache is empty, this will compute the filtered list on-the-fly
+    (so callers still work before cache build).
+    """
+    if song_unit_cache:
+        cached = song_unit_cache.get(unit)
+        if cached is not None:
+            return list(cached)
+    if unit == "None":
+        return list(songs)
+    computed = [s for s in songs if s.get("unit") == unit]
+    return computed
+
+
+# Card filter cache and helpers
+card_filter_cache = {}
+
+
+def build_card_filter_cache(cards):
+    """Precompute and store commonly used card filter lists.
+
+    Cached keys:
+    - 'four_star', 'three_star', 'two_star', 'no_two_star', 'sanrio'
+    - 'birthday', 'birthday1'..'birthday5'
+    - 'unit:{unit}' for each unit in UNITS
+    """
+    global card_filter_cache
+    card_filter_cache = {}
+    try:
+        card_filter_cache['four_star'] = [c for c in cards if c.get("card_rarity_type") == "rarity_4"]
+        card_filter_cache['three_star'] = [c for c in cards if c.get("card_rarity_type") == "rarity_3"]
+        card_filter_cache['two_star'] = [c for c in cards if c.get("card_rarity_type") == "rarity_2"]
+        card_filter_cache['no_two_star'] = [c for c in cards if c.get("card_rarity_type") != "rarity_2"]
+        card_filter_cache['sanrio'] = [c for c in cards if c.get("prefix", "").strip().startswith("feat.")]
+        card_filter_cache['birthday'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday"]
+        
+        card_filter_cache['birthday1'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday" and c.get("release_at", 0) < SECOND_ANNI * 1000]
+        card_filter_cache['birthday2'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday" and THIRD_ANNI * 1000 > c.get("release_at", 0) > SECOND_ANNI * 1000]
+        card_filter_cache['birthday3'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday" and FOURTH_ANNI * 1000 > c.get("release_at", 0) > THIRD_ANNI * 1000]
+        card_filter_cache['birthday4'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday" and FIFTH_ANNI * 1000 > c.get("release_at", 0) > FOURTH_ANNI * 1000]
+        card_filter_cache['birthday5'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday" and SIXTH_ANNI * 1000 > c.get("release_at", 0) > FIFTH_ANNI * 1000]
+        try:
+            for u in UNITS:
+                key = f"unit:{u}"
+                if u == "None":
+                    card_filter_cache[key] = list(cards)
+                else:
+                    try:
+                        filtered = unit_filter(cards, u) or list(cards)
+                    except Exception:
+                        filtered = [s for s in cards if s.get("unit") == u]
+                    card_filter_cache[key] = filtered
+        except Exception:
+            pass
+    except Exception:
+        card_filter_cache = {}
+    pass
+    return card_filter_cache
+
+
+def clear_card_filter_cache():
+    global card_filter_cache
+    card_filter_cache.clear()
+
+
+
+
+def get_cached_card_filter(name, cards=None):
+    """Return cached filtered card list by name, or compute on-the-fly if cache missing.
+
+    `name` examples: 'four_star', 'birthday2', 'unit:MyUnit'
+    """
+    if card_filter_cache:
+        res = card_filter_cache.get(name)
+        if res is not None:
+            return list(res)
+    # Fallbacks: compute using existing filter functions if available
+    if cards is None:
+        return []
+    if name == 'four_star':
+        return four_star_filter(cards)
+    if name == 'three_star':
+        return three_star_filter(cards)
+    if name == 'two_star':
+        return two_star_filter(cards)
+    if name == 'no_two_star':
+        return no_two_star_filter(cards)
+    if name == 'sanrio':
+        return sanrio_filter(cards)
+    if name == 'birthday':
+        return birthday_filter(cards)
+    if name.startswith('birthday') and name[8:].isdigit():
+        idx = name[8:]
+        func = globals().get(f'birthday{idx}_filter')
+        if callable(func):
+            return func(cards)
+        return []
+    if name.startswith('unit:'):
+        unit = name.split(':', 1)[1]
+        return unit_filter(cards, unit) or list(cards)
+    return []

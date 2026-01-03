@@ -20,6 +20,10 @@ class SongJacketGuessing(commands.Cog):
         load_dotenv()
         self.s3 = connect_to_r2_storage()
         self.BUCKET_NAME = os.getenv("BUCKET_NAME")
+        try:
+            build_song_unit_cache(self.song_list.song_data)
+        except Exception:
+            logger.exception("Failed to build song unit cache at startup")
 
     def cog_unload(self) -> None:
         self.update_song_list.cancel()
@@ -49,13 +53,7 @@ class SongJacketGuessing(commands.Cog):
 
         song_list_filtered_by_unit = []
         jacket_key = "songs/song-{}_{}"
-        if unit == "None":
-            song_list_filtered_by_unit = self.song_list.song_data
-            logger.info("test song lst - %s", song_list_filtered_by_unit)
-        else:
-            for song in self.song_list.song_data:
-                if song["unit"] == unit:
-                    song_list_filtered_by_unit.append(song)
+        song_list_filtered_by_unit = filter_songs_by_unit(self.song_list.song_data, unit)
         song_name_list = {x["id"]: x["romaji_name"] for x in song_list_filtered_by_unit}
         if not song_name_list:
             user = await self.bot.fetch_user(OWNER_SERVER_ID)
@@ -169,7 +167,12 @@ class SongJacketGuessing(commands.Cog):
     @tasks.loop(hours=24)
     async def update_song_list(self):
         self.song_list.song_data = SongStorage()
-        logger.info("Updated song db!")
+        # rebuild cache after updating the song list
+        try:
+            build_song_unit_cache(self.song_list.song_data)
+        except Exception:
+            logger.exception("Failed to rebuild song unit cache on update")
+        logger.info("Updated song db and rebuilt cache!")
 
 
 def setup(bot):

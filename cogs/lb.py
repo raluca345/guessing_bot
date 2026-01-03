@@ -86,13 +86,7 @@ class Lb(commands.Cog):
                 logger.exception(f"[create_lb] Failed fetching user {user_id}: {e}")
                 user_name = f"UnknownUser_{user_id}"
 
-            index = user_name.find("_")
-            if index != -1:
-                display_name = user_name[:index] + "\\" + user_name[index:]
-            else:
-                display_name = user_name
-
-            filtered_users.append({"user_id": user_id, "points": points, "display_name": display_name})
+            filtered_users.append({"user_id": user_id, "points": points, "display_name": user_name})
 
         per_page = 10
         total_pages = math.ceil(len(filtered_users) / per_page) if filtered_users else 1
