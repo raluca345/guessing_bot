@@ -168,6 +168,36 @@ def sanrio_filter(cards):
     return filtered_cards
 
 
+def enstars_filter(cards):
+    filtered_cards = [c for c in cards if c["id"] in ENSTARS_CARDS_IDS]
+    return filtered_cards
+
+
+def tamagotchi_filter(cards):
+    filtered_cards = [c for c in cards if c["id"] in TAMAGOTCHI_CARDS_IDS]
+    return filtered_cards
+
+
+def touhou_miku(cards):
+    filtered_cards = [c for c in cards if c["id"] == TOUHOU_MIKU_ID]
+    return filtered_cards
+
+
+def evillious_filter(cards):
+    filtered_cards = [c for c in cards if c["id"] in EVILLIOUS_CARDS_IDS]
+    return filtered_cards
+
+
+def collab_filter(cards):
+    filtered_cards = sanrio_filter(cards) + enstars_filter(cards) + tamagotchi_filter(cards) + touhou_miku(cards) + evillious_filter(cards)
+    return filtered_cards
+
+
+def movie_filter(cards):
+    filtered_cards = [c for c in cards if c["id"] in MOVIE_CARDS_IDS]
+    return filtered_cards
+
+
 def unit_filter(cards, unit):
     if unit == "None":
         return None
@@ -252,34 +282,35 @@ def build_card_filter_cache(cards):
     global card_filter_cache
     card_filter_cache = {}
     try:
-        card_filter_cache['four_star'] = [c for c in cards if c.get("card_rarity_type") == "rarity_4"]
-        card_filter_cache['three_star'] = [c for c in cards if c.get("card_rarity_type") == "rarity_3"]
-        card_filter_cache['two_star'] = [c for c in cards if c.get("card_rarity_type") == "rarity_2"]
-        card_filter_cache['no_two_star'] = [c for c in cards if c.get("card_rarity_type") != "rarity_2"]
-        card_filter_cache['sanrio'] = [c for c in cards if c.get("prefix", "").strip().startswith("feat.")]
-        card_filter_cache['birthday'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday"]
-        
-        card_filter_cache['birthday1'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday" and c.get("release_at", 0) < SECOND_ANNI * 1000]
-        card_filter_cache['birthday2'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday" and THIRD_ANNI * 1000 > c.get("release_at", 0) > SECOND_ANNI * 1000]
-        card_filter_cache['birthday3'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday" and FOURTH_ANNI * 1000 > c.get("release_at", 0) > THIRD_ANNI * 1000]
-        card_filter_cache['birthday4'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday" and FIFTH_ANNI * 1000 > c.get("release_at", 0) > FOURTH_ANNI * 1000]
-        card_filter_cache['birthday5'] = [c for c in cards if c.get("card_rarity_type") == "rarity_birthday" and SIXTH_ANNI * 1000 > c.get("release_at", 0) > FIFTH_ANNI * 1000]
+        card_filter_cache['four_star'] = four_star_filter(cards)
+        card_filter_cache['three_star'] = three_star_filter(cards)
+        card_filter_cache['two_star'] = two_star_filter(cards)
+        card_filter_cache['no_two_star'] = no_two_star_filter(cards)
+        card_filter_cache['sanrio'] = sanrio_filter(cards)
+        card_filter_cache['tamagotchi'] = tamagotchi_filter(cards)
+        card_filter_cache['collab'] = collab_filter(cards)
+        card_filter_cache['movie'] = movie_filter(cards)
+
+        card_filter_cache['birthday'] = birthday_filter(cards)
+        card_filter_cache['birthday1'] = birthday1_filter(cards)
+        card_filter_cache['birthday2'] = birthday2_filter(cards)
+        card_filter_cache['birthday3'] = birthday3_filter(cards)
+        card_filter_cache['birthday4'] = birthday4_filter(cards)
+        card_filter_cache['birthday5'] = birthday5_filter(cards)
+
         try:
             for u in UNITS:
                 key = f"unit:{u}"
                 if u == "None":
                     card_filter_cache[key] = list(cards)
                 else:
-                    try:
-                        filtered = unit_filter(cards, u) or list(cards)
-                    except Exception:
-                        filtered = [s for s in cards if s.get("unit") == u]
+                    # unit_filter already returns None for "None" unit, or a filtered list
+                    filtered = unit_filter(cards, u) or list(cards)
                     card_filter_cache[key] = filtered
         except Exception:
             pass
     except Exception:
         card_filter_cache = {}
-    pass
     return card_filter_cache
 
 
@@ -323,4 +354,10 @@ def get_cached_card_filter(name, cards=None):
     if name.startswith('unit:'):
         unit = name.split(':', 1)[1]
         return unit_filter(cards, unit) or list(cards)
+    if name == 'tamagotchi':
+        return tamagotchi_filter(cards)
+    if name == 'collab':
+        return collab_filter(cards)
+    if name == 'movie':
+        return movie_filter(cards)
     return []

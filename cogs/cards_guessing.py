@@ -335,6 +335,39 @@ class CardsGuessing(commands.Cog):
         finally:
             active_session[ctx.channel_id] = False
 
+
+    @cards.command(name="collabguess", description="Guess from all collaboration cards (enstars, tamagotchi, touhou, evillious, sanrio)!")
+    async def guess_collab(self, ctx):
+        if active_session[ctx.channel_id]:
+            await ctx.respond('Guessing has already started!')
+            return
+        active_session[ctx.channel_id] = True
+        try:
+            await ctx.defer()
+        except discord.errors.NotFound:
+            logger.warning("Interaction unknown when deferring in guess_collab; continuing without defer")
+        try:
+            await self.card_guess_helper(ctx, get_cached_card_filter('collab', self.card_list.card_data))
+        finally:
+            active_session[ctx.channel_id] = False
+
+    @cards.command(name="tamagotchiguess",
+                   description="Guess from all tamagotchi cards!")
+    async def guess_tamagotchi(self, ctx):
+        if active_session[ctx.channel_id]:
+            await ctx.respond('Guessing has already started!')
+            return
+        active_session[ctx.channel_id] = True
+        try:
+            await ctx.defer()
+        except discord.errors.NotFound:
+            logger.warning("Interaction unknown when deferring in guess_tamagotchi; continuing without defer")
+        try:
+            await self.card_guess_helper(ctx, get_cached_card_filter('tamagotchi', self.card_list.card_data))
+        finally:
+            active_session[ctx.channel_id] = False
+
+
     @cards.command(name="sanrioguess", description="Guess from all sanrio cards!")
     async def guess_sanrio(self, ctx):
         if active_session[ctx.channel_id]:
@@ -349,6 +382,22 @@ class CardsGuessing(commands.Cog):
             await self.card_guess_helper(ctx, get_cached_card_filter('sanrio', self.card_list.card_data))
         finally:
             active_session[ctx.channel_id] = False
+
+    @cards.command(name="movieguess", description="Guess from all movie cards!")
+    async def guess_movie(self, ctx):
+        if active_session[ctx.channel_id]:
+            await ctx.respond('Guessing has already started!')
+            return
+        active_session[ctx.channel_id] = True
+        try:
+            await ctx.defer()
+        except discord.errors.NotFound:
+            logger.warning("Interaction unknown when deferring in guess_movie; continuing without defer")
+        try:
+            await self.card_guess_helper(ctx, get_cached_card_filter('movie', self.card_list.card_data))
+        finally:
+            active_session[ctx.channel_id] = False
+
 
     @cards.command(name="unitguess", description="Guess from all cards from the unit of your choice!")
     async def guess_unit(self, ctx, unit: discord.Option(str, choices=UNITS)):  #type: ignore
