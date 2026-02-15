@@ -3,17 +3,22 @@ import logging
 import os
 import re
 import time
+import numpy as np
+from random import randrange, randint
 from collections import defaultdict
-from random import randint
+from io import BytesIO
 
 import mysql.connector
 from PIL import Image
 from dotenv import load_dotenv
+from rembg import remove, new_session
 
 from utility.constants import *
 import boto3
 from botocore.client import Config
 
+
+session = new_session("isnet-anime")
 
 # db configuration
 
@@ -77,6 +82,11 @@ def connect_to_r2_storage():
     return s3
 
 
+def get_mask_from_r2(s3, bucket, mask_key):
+    obj = s3.get_object(Bucket=bucket, Key=mask_key)
+    return np.load(BytesIO(obj["Body"].read()))
+
+
 # low level method
 def connect_to_db(config, attempts=3, delay=2):
     attempt = 1
@@ -100,6 +110,38 @@ def connect_to_db(config, attempts=3, delay=2):
     return None
 
 
+
+def generate_foreground_crop_from_mask(orig_img, alpha, crop_size, min_fg_ratio=0.12):
+
+    if crop_size >= orig_img.width or crop_size >= orig_img.height:
+        return orig_img.copy()
+
+    ys, xs = np.where(alpha > 0)
+
+    if len(xs) == 0:
+        return generate_img_crop(orig_img, crop_size)
+
+    for _ in range(4):
+        i = randrange(len(xs))
+        cx, cy = xs[i], ys[i]
+
+        left = cx - crop_size // 2
+        top = cy - crop_size // 2
+
+        left = max(0, min(left, orig_img.width - crop_size))
+        top = max(0, min(top, orig_img.height - crop_size))
+
+        right = left + crop_size
+        bottom = top + crop_size
+
+        patch = alpha[top:bottom, left:right]
+        if (patch > 0).mean() >= min_fg_ratio:
+            return orig_img.crop((left, top, right, bottom))
+
+    return generate_img_crop(orig_img, crop_size)
+
+
+
 def generate_img_crop(img: Image.Image, crop_size):
     width = img.width
     height = img.height
@@ -107,6 +149,35 @@ def generate_img_crop(img: Image.Image, crop_size):
     y1 = randint(0, height - crop_size - 1)
     box = (x1, y1, x1 + crop_size, y1 + crop_size)
     return img.crop(box)
+
+def remove_twostar_bg(img: Image.Image):
+    img = remove(img)
+    return img
+
+
+def prepare_twostar_image(img: Image.Image) -> Image.Image:
+    try:
+        processed = remove_twostar_bg(img)
+        try:
+            processed = processed.convert("RGBA")
+        except Exception:
+            # fallback: convert to RGB then to RGBA
+            try:
+                processed = processed.convert("RGB").convert("RGBA")
+            except Exception:
+                # give up and return the original crop as RGBA if possible
+                try:
+                    return img.convert("RGBA")
+                except Exception:
+                    return img
+
+        return processed
+    except Exception:
+        logger.exception("Failed to prepare 2* image; returning original")
+        try:
+            return img.convert("RGBA")
+        except Exception:
+            return img
 
 
 def four_star_filter(cards):
@@ -224,6 +295,7 @@ def sanitize_file_name(file_name):
 
 
 song_unit_cache = {}
+mask_cache = {}
 
 
 def build_song_unit_cache(songs):
@@ -249,6 +321,24 @@ def clear_song_unit_cache():
     """
     global song_unit_cache
     song_unit_cache.clear()
+
+
+def get_or_build_mask(card_key: str, img: Image.Image):
+    """
+    card_key = unique key like '123_normal' or '123_after'
+    img      = original PIL image
+    """
+    global mask_cache
+    cached = mask_cache.get(card_key)
+    if cached is not None:
+        return cached
+
+    fg = prepare_twostar_image(img)          # runs rembg once
+    alpha = np.array(fg.getchannel("A"))     # store just mask
+
+    mask_cache[card_key] = alpha
+    return alpha
+
 
 
 def filter_songs_by_unit(songs, unit):

@@ -1,18 +1,17 @@
 import asyncio
 import random
 from io import BytesIO
-from urllib.parse import urljoin
 
 import discord
-from aiohttp import ClientSession
 from discord.ext import commands, tasks
-from dotenv import load_dotenv
-from views.buttons import Buttons
 
 from storage.card_storage import CardStorage
 from storage.character_storage import CharacterStorage
 from utility.utility_functions import *
-from utility.constants import *
+from views.buttons import Buttons
+
+
+PANDE_AIRI = 676
 
 
 class CardsGuessing(commands.Cog):
@@ -31,7 +30,7 @@ class CardsGuessing(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        await asyncio.sleep(86400)
+        await asyncio.sleep(24 * 60 * 60)
         self.update_card_list.start()
 
     def cog_unload(self) -> None:
@@ -62,6 +61,7 @@ class CardsGuessing(commands.Cog):
         ch_id = getattr(ctx, "channel_id", None) or (ctx.channel.id if getattr(ctx, "channel", None) else None)
         try:
             card = random.choice(filtered_cards_list)
+
             logger.info(card)
             character = next(
                 (c for c in self.character_list.characters_data if c.get("characterId") == card["character_id"]))
@@ -118,11 +118,12 @@ class CardsGuessing(commands.Cog):
                 og_img = img.copy()
 
             if card["card_rarity_type"].strip() == "rarity_2":
-                w, h = img.size
-                box = (w // 6, 0, w - w // 6, h)
-                img = img.crop(box)
+                mask_key = f"masks/card_{card['id']}_normal.npy"
+                alpha = get_mask_from_r2(self.s3, self.BUCKET_NAME, mask_key)
+                region = generate_foreground_crop_from_mask(img, alpha, CARD_CROP_SIZE)
+            else:
+                region = generate_img_crop(img, CARD_CROP_SIZE)
 
-            region = generate_img_crop(img, CARD_CROP_SIZE)
             with BytesIO() as image_binary:
                 region.save(image_binary, 'PNG', quality=95, optimize=True)
                 image_binary.seek(0)
@@ -154,10 +155,11 @@ class CardsGuessing(commands.Cog):
                 og_img.save(image_binary, 'PNG', quality=95, optimize=True)
                 image_binary.seek(0)
                 answer = discord.File(fp=image_binary, filename="answer.png")
+
                 while True:
                     try:
-                        guess = await self.bot.wait_for('message', check=lambda
-                            message: message.author != self.bot and message.channel == ctx.channel and not message.author.bot,
+                        guess = await self.bot.wait_for('message', check=lambda message:
+                            message.author != self.bot and message.channel == ctx.channel and not message.author.bot,
                                                         timeout=30.0)
                         is_finished = await self.check_guess(ctx, guess, character, card_name, answer, leaderboard, filtered_cards_list)
                         if is_finished:
@@ -418,11 +420,72 @@ class CardsGuessing(commands.Cog):
     @tasks.loop(hours=24)
     async def update_card_list(self):
         self.card_list = CardStorage()
+        build_card_filter_cache(self.card_list.card_data)
+
+        logger.info("Update card db!")
+
+    @cards.command(name="debug_preprocess", description="(debug) Return preprocessed 2* image for the given card id")
+    async def debug_preprocess(self, ctx, card_id: discord.Option(int, required=True, description="Card id to preprocess")):  # type: ignore
+        """Fetch the card image for card_id, run the 2* preprocessing (prepare_twostar_image) and return the result.
+
+        This command is for debugging: it returns the processed (transparent) 2* image so you can verify background removal.
+        """
+        if active_session.get(getattr(ctx, "channel_id", None) or (ctx.channel.id if getattr(ctx, "channel", None) else None)):
+            await ctx.respond('A guessing session is active. Try again later.')
+            return
+
         try:
-            build_card_filter_cache(self.card_list.card_data)
+            await ctx.defer()
+        except discord.errors.NotFound:
+            logger.warning("Interaction unknown when deferring in debug_preprocess; continuing without defer")
+
+        # locate the card in the global card list
+        try:
+            card = next((c for c in self.card_list.card_data if c.get("id") == card_id), None)
+            if card is None:
+                await ctx.respond(f"Card with id {card_id} not found.")
+                return
+
+            card_type = "normal.png"
+            card_key = f"cards/card_{card['id']}_{card_type}"
+            try:
+                obj = self.s3.get_object(Bucket=self.BUCKET_NAME, Key=card_key)
+                buffer = BytesIO(obj['Body'].read())
+                img = Image.open(buffer)
+            except Exception as e:
+                logger.exception("Failed to fetch card %s for debug_preprocess: %s", card_id, e)
+                await ctx.respond(f"Failed to fetch card {card_id}: {e}")
+                return
+
+            # apply vertical rotation if necessary
+            if card.get("assetbundle_name") in self.VERTICAL_CARDS and card_type == "card_after_training.png":
+                img = img.rotate(270, expand=True)
+
+            # run the 2* prep (the helper will fallback safely)
+            processed = prepare_twostar_image(img)
+
+            # send the processed image
+            with BytesIO() as out:
+                try:
+                    # ensure PNG with alpha (if present)
+                    if getattr(processed, 'mode', None) not in ("RGBA", "RGB"):
+                        try:
+                            processed = processed.convert("RGBA")
+                        except Exception:
+                            processed = processed.convert("RGB")
+                    processed.save(out, 'PNG', quality=95, optimize=True)
+                    out.seek(0)
+                    file = discord.File(fp=out, filename=f"card_{card_id}_processed.png")
+                    await ctx.respond(file=file)
+                except Exception:
+                    logger.exception("Failed to send processed image for card %s", card_id)
+                    await ctx.respond("Failed to build or send the processed image")
         except Exception:
-            logger.exception("Failed to rebuild card filter cache on update")
-        logger.info("Update card db and rebuilt caches!")
+            logger.exception("Unexpected error in debug_preprocess")
+            try:
+                await ctx.respond("Unexpected error during debug preprocess")
+            except Exception:
+                pass
 
 def setup(bot):
     bot.add_cog(CardsGuessing(bot))
