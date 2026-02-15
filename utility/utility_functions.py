@@ -11,14 +11,11 @@ from io import BytesIO
 import mysql.connector
 from PIL import Image
 from dotenv import load_dotenv
-from rembg import remove, new_session
 
 from utility.constants import *
 import boto3
 from botocore.client import Config
 
-
-session = new_session("isnet-anime")
 
 # db configuration
 
@@ -149,35 +146,6 @@ def generate_img_crop(img: Image.Image, crop_size):
     y1 = randint(0, height - crop_size - 1)
     box = (x1, y1, x1 + crop_size, y1 + crop_size)
     return img.crop(box)
-
-def remove_twostar_bg(img: Image.Image):
-    img = remove(img)
-    return img
-
-
-def prepare_twostar_image(img: Image.Image) -> Image.Image:
-    try:
-        processed = remove_twostar_bg(img)
-        try:
-            processed = processed.convert("RGBA")
-        except Exception:
-            # fallback: convert to RGB then to RGBA
-            try:
-                processed = processed.convert("RGB").convert("RGBA")
-            except Exception:
-                # give up and return the original crop as RGBA if possible
-                try:
-                    return img.convert("RGBA")
-                except Exception:
-                    return img
-
-        return processed
-    except Exception:
-        logger.exception("Failed to prepare 2* image; returning original")
-        try:
-            return img.convert("RGBA")
-        except Exception:
-            return img
 
 
 def four_star_filter(cards):
@@ -321,23 +289,6 @@ def clear_song_unit_cache():
     """
     global song_unit_cache
     song_unit_cache.clear()
-
-
-def get_or_build_mask(card_key: str, img: Image.Image):
-    """
-    card_key = unique key like '123_normal' or '123_after'
-    img      = original PIL image
-    """
-    global mask_cache
-    cached = mask_cache.get(card_key)
-    if cached is not None:
-        return cached
-
-    fg = prepare_twostar_image(img)          # runs rembg once
-    alpha = np.array(fg.getchannel("A"))     # store just mask
-
-    mask_cache[card_key] = alpha
-    return alpha
 
 
 
