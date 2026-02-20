@@ -1,7 +1,7 @@
 import os
 
 import discord
-from discord.ext import tasks
+from discord.ext import tasks, commands
 from dotenv import load_dotenv
 
 from utility.utility_functions import logger, active_session
@@ -64,6 +64,7 @@ async def on_command_error(ctx: discord.ApplicationContext, error):
 
 @bot.command(name="reload", guild_ids=[1076494695204659220],
             default_member_permissions=discord.Permissions(administrator=True))
+@commands.is_owner()
 async def reload(ctx, cog_name: discord.Option(choices=cogs_list)): #type: ignore
     if cog_name in cogs_list:
         bot.reload_extension(f"cogs.{cog_name}")

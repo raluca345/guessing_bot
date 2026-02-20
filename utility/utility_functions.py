@@ -109,33 +109,46 @@ def connect_to_db(config, attempts=3, delay=2):
 
 
 def generate_foreground_crop_from_mask(orig_img, alpha, crop_size, min_fg_ratio=0.12):
+    width = orig_img.width
+    height = orig_img.height
 
-    if crop_size >= orig_img.width or crop_size >= orig_img.height:
+    # same guard idea as normal crop
+    if crop_size >= width or crop_size >= height:
         return orig_img.copy()
 
     ys, xs = np.where(alpha > 0)
 
+    # if mask failed → behave exactly like normal crop
     if len(xs) == 0:
         return generate_img_crop(orig_img, crop_size)
 
-    for _ in range(4):
+    last_box = None
+    for _ in range(4):  # try a few foreground-biased crops
+        # pick a random foreground pixel as anchor
         i = randrange(len(xs))
         cx, cy = xs[i], ys[i]
 
-        left = cx - crop_size // 2
-        top = cy - crop_size // 2
+        # convert center → top-left (like normal crop uses x1,y1)
+        x1 = cx - crop_size // 2
+        y1 = cy - crop_size // 2
 
-        left = max(0, min(left, orig_img.width - crop_size))
-        top = max(0, min(top, orig_img.height - crop_size))
+        # clamp like bounds-safe random crop
+        x1 = max(0, min(x1, width - crop_size))
+        y1 = max(0, min(y1, height - crop_size))
 
-        right = left + crop_size
-        bottom = top + crop_size
+        box = (x1, y1, x1 + crop_size, y1 + crop_size)
+        last_box = box
 
-        patch = alpha[top:bottom, left:right]
+        # foreground coverage check
+        patch = alpha[y1:y1 + crop_size, x1:x1 + crop_size]
         if (patch > 0).mean() >= min_fg_ratio:
-            return orig_img.crop((left, top, right, bottom))
+            return orig_img.crop(box)
 
+    # fallback → return the last generated crop
+    if last_box is not None:
+        return orig_img.crop(last_box)
     return generate_img_crop(orig_img, crop_size)
+
 
 
 
@@ -203,7 +216,7 @@ def birthday5_filter(cards):
 
 
 def sanrio_filter(cards):
-    filtered_cards = [c for c in cards if c["prefix"].strip().startswith("feat.")]
+    filtered_cards = [c for c in cards if c["id"] in SANRIO_CARDS_IDS]
     return filtered_cards
 
 

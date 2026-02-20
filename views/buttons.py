@@ -1,6 +1,5 @@
 import discord
 import logging
-from utility.utility_functions import active_session
 
 logger = logging.getLogger(__name__)
 
@@ -31,17 +30,8 @@ class Buttons(discord.ui.View):
             logger.warning("Interaction expired when pressing Play Again; falling back to stored ctx")
             interaction_to_use = self.ctx
 
-        # Start new session using a safe active_session toggle; if the callback fails, ensure flag is cleared.
-        ch_id = getattr(interaction_to_use, "channel_id", None) or (interaction_to_use.channel.id if getattr(interaction_to_use, "channel", None) else None)
-        pass
+        # Start new session
         try:
-            if ch_id is not None:
-                active_session[ch_id] = True
             await self.callback(interaction_to_use, *self.callback_args)
         except Exception:
             logger.exception("Error while starting new session from Play Again button")
-            try:
-                if ch_id is not None:
-                    active_session[ch_id] = False
-            except Exception:
-                logger.exception("Failed to clear active_session after failed restart")

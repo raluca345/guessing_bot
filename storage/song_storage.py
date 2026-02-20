@@ -11,6 +11,7 @@ class SongStorage:
 
     def __init__(self) -> None:
         self.song_data = []
+        self.song_by_name = {}
         self.get_song_data()
 
     def get_song_data(self):
@@ -41,3 +42,16 @@ class SongStorage:
             row["romaji_lyrics"] = romaji_lyrics
             
             self.song_data.append(row)
+            self.song_by_name[row["romaji_name"]] = row
+
+    def add_song_alias(self, song_name: str, new_alias: str) -> bool:
+        song = self.song_by_name.get(song_name)
+        if not song or new_alias.lower() in song["aliases"]:
+            return False
+
+        query = "UPDATE songs SET aliases = CONCAT(aliases, %s) WHERE romaji_name = %s"
+        self.cursor.execute(query, (";" + new_alias, song_name))
+        self.connection.commit()
+
+        song["aliases"].append(new_alias.lower())
+        return True
