@@ -74,7 +74,10 @@ class LyricsGuessing(commands.Cog):
         song = random.choice(song_list_filtered_by_unit)
 
         logger.info(f"Song: {song}")
-        song_lyric = random.choice(lyrics[song["romaji_name"]])
+        #song_lyric = random.choice(lyrics[song["romaji_name"]])
+        # send 2 lyrics at once
+        song_lyrics_index = random.randint(0, max(0, len(lyrics[song["romaji_name"]]) - 2))
+        song_lyrics = "\n".join([lyrics[song["romaji_name"]][song_lyrics_index], lyrics[song["romaji_name"]][song_lyrics_index + 1]])
         song["aliases"] = [sub(pattern=PATTERN, repl="", string=s.lower()) for s in song["aliases"]]
 
         song_name = sanitize_file_name(song["romaji_name"]).replace(" ", "-")
@@ -84,9 +87,9 @@ class LyricsGuessing(commands.Cog):
         logger.info(jacket_key)
 
         if isinstance(ctx, discord.Interaction) or (not isinstance(ctx, discord.Interaction) and ctx.interaction.response.is_done()):
-            await ctx.followup.send(song_lyric)
+            await ctx.followup.send(song_lyrics)
         else:
-            await ctx.respond(song_lyric)
+            await ctx.respond(song_lyrics)
         try:
             obj = self.s3.get_object(Bucket=self.BUCKET_NAME, Key=jacket_key)
             buffer = BytesIO(obj['Body'].read())
@@ -132,6 +135,9 @@ class LyricsGuessing(commands.Cog):
                 break
 
     async def check_guess(self, ctx, guess, song, buffer, song_list_filtered_by_unit, leaderboard):
+        if guess.content.lower().strip().startswith("."):
+            return False
+
         guessed_song = sub(pattern=PATTERN, string=guess.content.strip().lower(), repl="")
         guessed_song = guessed_song.replace(" ", "")
         guessed_song = guessed_song.strip()
@@ -154,8 +160,11 @@ class LyricsGuessing(commands.Cog):
                                                  ["romaji", song["unit"]]))
             return True
         else:
-            temp = next((s["romaji_name"] for s in song_list_filtered_by_unit if
-                         guessed_song in s["aliases"] or guessed_song == s["romaji_name"].lower()), None)
+            temp = next(
+                (s["romaji_name"] for s in song_list_filtered_by_unit if
+                 guessed_song in [sub(pattern=PATTERN, repl="", string=a.lower()) for a in s["aliases"]]
+                 or guessed_song == sub(pattern=PATTERN, repl="", string=s["romaji_name"].lower()).replace(" ", "")),
+                None)
 
             if temp:
                 await ctx.followup.send(f"Nope, it's not **{temp}**, try again!")

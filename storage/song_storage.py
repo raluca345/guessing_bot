@@ -1,20 +1,30 @@
 import re
 
-from utility.utility_functions import connect
+from utility.utility_functions import connect, logger
 
 class SongStorage:
 
-    connection = connect()
-    cursor = connection.cursor(dictionary=True)
-
-    song_data = []
-
     def __init__(self) -> None:
+        self.connection = connect()
+        self.cursor = self.connection.cursor(dictionary=True)
         self.song_data = []
         self.song_by_name = {}
         self.get_song_data()
 
+    def _ensure_connection(self):
+        try:
+            self.connection.ping(reconnect=True, attempts=3, delay=2)
+        except Exception:
+            logger.warning("Database connection lost, reconnecting...")
+            try:
+                self.connection.close()
+            except Exception:
+                pass
+            self.connection = connect()
+        self.cursor = self.connection.cursor(dictionary=True)
+
     def get_song_data(self):
+        self._ensure_connection()
 
         query = ("SELECT id, romaji_name, aliases, unit, english_lyrics, "
                  "kanji_lyrics, romaji_lyrics FROM songs")
@@ -49,6 +59,7 @@ class SongStorage:
         if not song or new_alias.lower() in song["aliases"]:
             return False
 
+        self._ensure_connection()
         query = "UPDATE songs SET aliases = CONCAT(aliases, %s) WHERE romaji_name = %s"
         self.cursor.execute(query, (";" + new_alias, song_name))
         self.connection.commit()

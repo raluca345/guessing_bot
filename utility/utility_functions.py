@@ -90,7 +90,7 @@ def connect_to_db(config, attempts=3, delay=2):
     # connection routine
     while attempt < attempts + 1:
         try:
-            return mysql.connector.connect(**config, pool_name="pool", pool_size=5)
+            return mysql.connector.connect(**config, pool_name="pool", pool_size=10)
         except (mysql.connector.Error, IOError) as e:
             if attempts is attempt:
                 # all attempts failed

@@ -189,7 +189,11 @@ class CardsGuessing(commands.Cog):
             all_character_names_but_the_right_one = [c["characterName"].lower() for c
                                                     in self.character_list.characters_data 
                                                     if c["characterName"] != character["characterName"]]
-            if guess.content.lower().strip() == character[
+            
+            if guess.content.lower().strip().startswith("."):
+                return # ignore it
+
+            elif guess.content.lower().strip() == character[
                 "characterName"].lower() or guess.content.lower().strip() in \
                     character["aliases"] or guess.content.lower().strip("-").strip() in character[
                 "aliases"] or guess.content.lower().strip("-").strip() == character["characterName"].lower():

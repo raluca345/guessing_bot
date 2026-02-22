@@ -127,6 +127,9 @@ class SongJacketGuessing(commands.Cog):
 
 
     async def check_guess(self, ctx, guess, song, answer, song_list_filtered_by_unit, leaderboard, unit, answer_bytes):
+        if guess.content.lower().strip().startswith("."):
+            return False
+
         guessed_song = sub(pattern=PATTERN, string=guess.content.strip().lower(), repl="")
         guessed_song = guessed_song.replace(" ", "")
         guessed_song = guessed_song.strip()  # making sure trailing spaces are really gone
@@ -154,13 +157,11 @@ class SongJacketGuessing(commands.Cog):
             return True
         else:
             # find a song that matches the incorrect guess
-            temp = next((s["romaji_name"] for s in song_list_filtered_by_unit if
-                         guessed_song in s["aliases"] or guessed_song == s[
-                             "romaji_name"].lower() or guessed_song == sub(pattern=PATTERN, repl=" ", string=s[
-                             "romaji_name"]).lower() or guessed_song == sub(pattern=PATTERN, repl="", string=s[
-                             "romaji_name"]).lower() or guessed_song == sub(pattern=PATTERN, repl="",
-                                                                            string=s["romaji_name"]).replace(" ", "")),
-                        None)
+            temp = next(
+                (s["romaji_name"] for s in song_list_filtered_by_unit if
+                 guessed_song in [sub(pattern=PATTERN, repl="", string=a.lower()) for a in s["aliases"]]
+                 or guessed_song == sub(pattern=PATTERN, repl="", string=s["romaji_name"].lower()).replace(" ", "")),
+                None)
 
             if temp:
                 await ctx.followup.send(f"Nope, it's not **{temp}**, try again!")
