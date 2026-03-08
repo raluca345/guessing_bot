@@ -1,16 +1,37 @@
-import datetime
-import aiohttp
+import asyncio
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from dotenv import load_dotenv
 from storage.character_storage import CharacterStorage
 
 from utility.utility_functions import logger
 from utility.constants import *
 import os
+import tweepy
 import tweepy.asynchronous
 
 load_dotenv()
+
+
+class _CglFilteredStream(tweepy.asynchronous.AsyncStreamingClient):
+    def __init__(self, bearer_token: str, hub: "TwtHub"):
+        super().__init__(bearer_token=bearer_token, wait_on_rate_limit=True)
+        self._hub = hub
+
+    async def on_tweet(self, tweet: tweepy.Tweet):
+        await self._hub.handle_incoming_tweet(tweet)
+
+    async def on_request_error(self, status_code):
+        logger.error("Twitter stream request error: %s", status_code)
+
+    async def on_connection_error(self):
+        logger.error("Twitter stream connection error")
+
+    async def on_exception(self, exception):
+        logger.error("Twitter stream exception: %s", exception)
+
+    async def on_disconnect(self):
+        logger.warning("Twitter stream disconnected")
 
 
 class TwtHub(commands.Cog):
@@ -18,25 +39,82 @@ class TwtHub(commands.Cog):
         self.bot = bot
         self.character_list = CharacterStorage().characters_data
         self.character_names = [character["characterName"] for character in self.character_list]
+
         self.units = UNITS
         self.unit_to_character_names = unit_to_character_names
-        self.client = self.initialize_twitter_client()
+
+        self.stream: _CglFilteredStream | None = None
+        self.stream_task: asyncio.Task | None = None
+
+        self._last_sent_tweet_id: str | int | None = None
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.broadcast_tweets_to_channel.start()
+        if self.stream_task is None:
+            self.stream_task = asyncio.create_task(self.stream_worker())
 
-    @staticmethod
-    def initialize_twitter_client():
-        client = None
+    def cog_unload(self):
+        if self.stream:
+            try:
+                self.stream.disconnect()
+            except Exception:
+                pass
+
+        if self.stream_task:
+            self.stream_task.cancel()
+
+    async def stream_worker(self):
+        bearer_token = os.getenv("BEARER_TOKEN")
+
+        if not bearer_token:
+            logger.error("BEARER_TOKEN is not set; Twitter stream disabled.")
+            return
+
+        while True:
+            try:
+                logger.info("Starting Twitter filtered stream")
+
+                self.stream = _CglFilteredStream(bearer_token, self)
+
+                await self._ensure_stream_rule()
+
+                await self.stream.filter(
+                    tweet_fields=["created_at", "author_id"],
+                )
+
+            except asyncio.CancelledError:
+                logger.info("Twitter stream worker cancelled")
+                if self.stream:
+                    self.stream.disconnect()
+                raise
+
+            except Exception as e:
+                logger.error("Twitter stream crashed: %s", e)
+
+            logger.info("Restarting Twitter stream in 30 seconds")
+            await asyncio.sleep(30)
+
+    async def _ensure_stream_rule(self):
+        if self.stream is None:
+            return
+
+        desired_value = f"from:{CGL_TWT_ACC_ID} -is:retweet -is:reply"
+        desired_tag = "cgl-week-announcement"
+
         try:
-            bearer_token = os.getenv('BEARER_TOKEN')
-            if not bearer_token:
-                raise ValueError("BEARER_TOKEN is not set in the environment variables.")
-            client = tweepy.asynchronous.AsyncClient(bearer_token=bearer_token, wait_on_rate_limit=True)
-            return client
+            existing = await self.stream.get_rules()
+            rules = list(getattr(existing, "data", None) or [])
+
+            for rule in rules:
+                if getattr(rule, "tag", None) == desired_tag:
+                    if getattr(rule, "value", None) != desired_value:
+                        await self.stream.delete_rules(rule.id)
+                        await self.stream.add_rules(tweepy.StreamRule(desired_value, tag=desired_tag))
+                    return
+
+            await self.stream.add_rules(tweepy.StreamRule(desired_value, tag=desired_tag))
         except Exception as e:
-            logger.error(f"Error initializing Twitter client: {e}")
+            logger.error("Error ensuring Twitter stream rules: %s", e)
 
     def handle_normal_week(self, character_names_line, server, week_number, tweet_url, role):
         character_name = ""
@@ -130,87 +208,94 @@ class TwtHub(commands.Cog):
                    f"\n\n@prskcgl tweeted {tweet_url}\n{role.mention}")
         return message
 
-    @tasks.loop(time=datetime.time(hour=13, minute=1))
-    async def broadcast_tweets_to_channel(self):
-        if self.client:
-            logger.info(self.bot.guilds)
-            server = self.bot.get_guild(CGL_SERVER_ID)
+    def _build_week_announcement_message(self, tweet_text: str, server, tweet_url: str, role):
+        first_line_in_twt = tweet_text.split("\n")[0].split()
+        logger.info("First line in tweet: %s", first_line_in_twt)
+
+        character_names_line = tweet_text.split("\n")[-1].split("!")[0].strip()
+        logger.info("Character names line: %s", character_names_line)
+
+        try:
+            week_position = first_line_in_twt.index("Week")
+            week_number = first_line_in_twt[week_position + 1]
+        except (ValueError, IndexError):
+            logger.error("Could not parse week number from tweet: %s", first_line_in_twt)
+            return None
+
+        if "Anniversary" in first_line_in_twt:
+            return self.handle_everyone_week(week_number, tweet_url, role)
+
+        if "Shuffle" in first_line_in_twt:
             try:
-                response = await self.client.get_users_tweets(CGL_TWT_ACC_ID, max_results=5,
-                                                              tweet_fields="created_at")
-                if response.data:
-                    tweet = response.data[0]
-                    channel = None
-                    role = None
-                    message = ""
-                    tweet_url = f"https://x.com/prskcgl/status/{tweet.id}"
+                week_position = first_line_in_twt.index("Week", week_position + 1)
+                week_number = first_line_in_twt[week_position + 1]
+            except (ValueError, IndexError):
+                logger.error("Could not parse Shuffle Unit week number from tweet: %s", first_line_in_twt)
+                return None
+            return self.handle_shuffle_unit_week(character_names_line, server, week_number, tweet_url, role)
 
-                    if "will be held" in tweet.text:
-                        channel = self.bot.get_channel(WEEK_ANNOUNCEMENT_CHANNEL)
-                        role = discord.utils.get(server.roles, name="Week Announcement Ping")
-                        first_line_in_twt = tweet.text.split("\n")[0].split(" ")
-                        logger.info("First line in tweet: %s", first_line_in_twt)
-                        character_names_line = tweet.text.split("\n")[-1].split("!")[0].strip()
-                        logger.info("Character names line: %s", character_names_line)
-                        week_position = first_line_in_twt.index("Week")
-                        week_number = first_line_in_twt[week_position + 1]
+        if "Unit" in first_line_in_twt:
+            try:
+                week_position = first_line_in_twt.index("Week", week_position + 1)
+                week_number = first_line_in_twt[week_position + 1]
+            except (ValueError, IndexError):
+                logger.error("Could not parse Unit week number from tweet: %s", first_line_in_twt)
+                return None
+            return self.handle_unit_week(first_line_in_twt, server, week_number, tweet_url, role)
 
-                        if "Anniversary" in first_line_in_twt:
-                            message = self.handle_everyone_week(week_number, tweet_url, role)
+        if "and" in character_names_line:
+            return self.handle_kizuna_week(character_names_line, server, week_number, tweet_url, role)
 
-                        elif "Shuffle" in first_line_in_twt:
-                            # "week" appears twice so look for the second one, the week number is after that one
-                            # looks crappy so might change later
-                            week_position = first_line_in_twt.index("Week", week_position + 1)
-                            week_number = first_line_in_twt[week_position + 1]
-                            message = self.handle_shuffle_unit_week(character_names_line, server,
-                                                                    week_number, tweet_url, role)
+        return self.handle_normal_week(character_names_line, server, week_number, tweet_url, role)
 
-                        elif "Unit" in first_line_in_twt:
-                            # same thing as above
-                            week_position = first_line_in_twt.index("Week", week_position + 1)
-                            week_number = first_line_in_twt[week_position + 1]
-                            message = self.handle_unit_week(first_line_in_twt, server,
-                                                            week_number, tweet_url, role)
+    async def handle_incoming_tweet(self, tweet: tweepy.Tweet):
+        if tweet is None or not getattr(tweet, "text", None):
+            return
 
-                        elif "and" in character_names_line:
-                            message = self.handle_kizuna_week(character_names_line, server,
-                                                              week_number, tweet_url, role)
+        author_id = getattr(tweet, "author_id", None)
+        if author_id is not None and str(author_id) != str(CGL_TWT_ACC_ID):
+            return
 
-                        else:
-                            message = self.handle_normal_week(character_names_line, server,
-                                                              week_number, tweet_url, role)
+        tweet_url = f"https://x.com/prskcgl/status/{tweet.id}"
 
-                    if channel:
-                        try:
-                            async for m in channel.history(limit=1):
-                                logger.info(f"Last message in channel: {m.content}")
-                                if tweet_url in m.content:
-                                    logger.info("No new tweets found.")
-                                    return
-                            await channel.send(message)
-                            logger.info(f"Sent message to channel {channel.name}")
-                        except discord.Forbidden:
-                            logger.error(
-                                "Bot does not have permission to send messages in the channel or view the message history.")
-                    else:
-                        logger.error("Channel not found or bot does not have access to the channel.")
-                    logger.info(f"Sent new tweet: {tweet.text}")
-                else:
-                    logger.info("No new tweets found.")
-            except aiohttp.ClientConnectionError as e:
-                logger.error(f"Connection error fetching tweets: {e}")
-                logger.error("Could not fetch tweets.")
-            except tweepy.TweepyException as e:
-                if e.response:
-                    logger.error(f"Tweepy error: {e}")
-                    logger.error(f"Response Headers: {e.response.headers}")
-                else:
-                    logger.error(f"Tweepy error: {e}")
-            except Exception as e:
-                logger.error(f"Error fetching tweets: {e}")
-        else:
-            logger.error("Client is not initialized.")
+        if self._last_sent_tweet_id == tweet.id:
+            return
+
+        if "will be held" not in tweet.text:
+            return
+
+        server = self.bot.get_guild(CGL_SERVER_ID)
+        if server is None:
+            logger.error("Server not found; cannot broadcast tweet")
+            return
+
+        channel = self.bot.get_channel(WEEK_ANNOUNCEMENT_CHANNEL)
+        if channel is None:
+            logger.error("Week announcement channel not found")
+            return
+
+        role = discord.utils.get(server.roles, name="Week Announcement Ping")
+        if role is None:
+            logger.error("Week Announcement Ping role not found")
+            return
+
+        message = self._build_week_announcement_message(tweet.text, server, tweet_url, role)
+        if not message:
+            return
+
+        try:
+            async for m in channel.history(limit=1):
+                if tweet_url in getattr(m, "content", ""):
+                    logger.info("Tweet already posted; skipping")
+                    self._last_sent_tweet_id = tweet.id
+                    return
+            await channel.send(message)
+            self._last_sent_tweet_id = tweet.id
+            logger.info("Sent tweet announcement to channel %s", getattr(channel, "name", "<unknown>"))
+        except discord.Forbidden:
+            logger.error("Missing permission to send messages or read history in the channel")
+        except Exception as e:
+            logger.error("Error sending tweet announcement: %s", e)
 
 
 def setup(bot):
