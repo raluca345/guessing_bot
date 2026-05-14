@@ -140,8 +140,10 @@ class SongJacketGuessing(commands.Cog):
                     tmp = song["romaji_name"]
                     logger.info(unit)
                     answer = discord.File(fp=BytesIO(answer_bytes), filename="answer.png")
-                    await ctx.followup.send(f"Time's up! The song was **{tmp}**!", file=answer,
-                                            view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit]))
+                    buttons_view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
+                    sent = await ctx.followup.send(f"Time's up! The song was **{tmp}**!", file=answer,
+                                            view=buttons_view)
+                    buttons_view.message = sent
                     break
         finally:
             active_session[ch_id] = False
@@ -163,11 +165,13 @@ class SongJacketGuessing(commands.Cog):
             or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).replace(" ", "")
         ):
             logger.info(unit)
+            buttons_view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
             sent = await ctx.followup.send(
                 f"Congrats {guess.author.mention}! You guessed **{song['romaji_name']}** correctly!",
                 file=answer,
-                view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
+                view=buttons_view
             )
+            buttons_view.message = sent
             user_id = guess.author.id
             guild_id = ctx.guild.id if ctx.guild else 0
             channel_id = ctx.channel.id if ctx.channel else 0
@@ -193,11 +197,13 @@ class SongJacketGuessing(commands.Cog):
             return True
         elif guessed_song == "endguess":
             endguess_answer = discord.File(fp=BytesIO(answer_bytes), filename="answer.png")
-            await ctx.followup.send(
+            buttons_view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
+            sent = await ctx.followup.send(
                 f"Giving up? The song was **{song['romaji_name']}**!",
                 file=endguess_answer,
-                view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
+                view=buttons_view
             )
+            buttons_view.message = sent
             return True
         else:
             temp = next(

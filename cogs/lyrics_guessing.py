@@ -149,10 +149,12 @@ class LyricsGuessing(commands.Cog):
                 if is_finished:
                     break
             except asyncio.TimeoutError:
-                await ctx.followup.send(f"Time's up! The song was **{song['romaji_name']}**!",
+                buttons_view = Buttons(ctx, ["Play Again"], self.guess_the_song,
+                                       ["romaji", song["unit"]])
+                sent = await ctx.followup.send(f"Time's up! The song was **{song['romaji_name']}**!",
                                         file=file,
-                                        view=Buttons(ctx, ["Play Again"], self.guess_the_song,
-                                                     ["romaji", song["unit"]]))
+                                        view=buttons_view)
+                buttons_view.message = sent
                 break
 
     async def check_guess(self, ctx, guess, song, buffer, song_list_filtered_by_unit, leaderboard):
@@ -170,11 +172,13 @@ class LyricsGuessing(commands.Cog):
             or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).lower()
             or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).replace(" ", "")
         ):
+            buttons_view = Buttons(ctx, ["Play Again"], self.guess_the_song, ["romaji", song["unit"]])
             sent = await ctx.followup.send(
                 f"Congrats {guess.author.mention}! You guessed **{song['romaji_name']}** correctly!",
                 file=discord.File(fp=buffer, filename="jacket.png"),
-                view=Buttons(ctx, ["Play Again"], self.guess_the_song, ["romaji", song["unit"]])
+                view=buttons_view
             )
+            buttons_view.message = sent
             user_id = guess.author.id
             guild_id = ctx.guild.id if ctx.guild else 0
             channel_id = ctx.channel.id if ctx.channel else 0
@@ -198,11 +202,13 @@ class LyricsGuessing(commands.Cog):
                 await ctx.followup.send("Error updating lb")
             return True
         elif guessed_song == "endguess":
-            await ctx.followup.send(
+            buttons_view = Buttons(ctx, ["Play Again"], self.guess_the_song, ["romaji", song["unit"]])
+            sent = await ctx.followup.send(
                 f"Giving up? The song was **{song['romaji_name']}**!",
                 file=discord.File(fp=buffer, filename="jacket.png"),
-                view=Buttons(ctx, ["Play Again"], self.guess_the_song, ["romaji", song["unit"]])
+                view=buttons_view
             )
+            buttons_view.message = sent
             return True
         else:
             temp = next(

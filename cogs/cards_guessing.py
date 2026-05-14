@@ -204,7 +204,7 @@ class CardsGuessing(commands.Cog):
                 og_img = img.copy()
 
             # -------------------------
-            # 2★ MASK LOGIC RESTORED
+            # 2★ MASK LOGIC
             # -------------------------
             if card["card_rarity_type"].strip() == "rarity_2":
                 mask_key = f"masks/card_{card['id']}_normal.npz"
@@ -262,17 +262,19 @@ class CardsGuessing(commands.Cog):
                             break
 
                     except asyncio.TimeoutError:
-                        await ctx.followup.send(
+                        buttons_view = Buttons(
+                            ctx,
+                            ["Play Again"],
+                            self.card_guess_helper,
+                            [filtered_cards_list],
+                        )
+                        sent = await ctx.followup.send(
                             f"Time's up! It was **{character['characterLastName']} "
                             f"{character['characterName']}** - **{card_name}**!",
                             file=answer,
-                            view=Buttons(
-                                ctx,
-                                ["Play Again"],
-                                self.card_guess_helper,
-                                [filtered_cards_list],
-                            ),
+                            view=buttons_view,
                         )
+                        buttons_view.message = sent
                         break
 
         finally:
@@ -323,18 +325,20 @@ class CardsGuessing(commands.Cog):
             )
 
             if correct:
+                buttons_view = Buttons(
+                    ctx,
+                    ["Play Again"],
+                    self.card_guess_helper,
+                    [filtered_cards_list],
+                )
                 sent = await ctx.followup.send(
                     f'Congrats {guess.author.mention}! You guessed '
                     f'**{character["characterLastName"]} {character["characterName"]}** '
                     f'- **{card_name}** correctly!',
                     file=answer,
-                    view=Buttons(
-                        ctx,
-                        ["Play Again"],
-                        self.card_guess_helper,
-                        [filtered_cards_list],
-                    ),
+                    view=buttons_view,
                 )
+                buttons_view.message = sent
 
                 guild_id = ctx.guild.id if ctx.guild else 0
                 channel_id = ctx.channel.id if ctx.channel else 0
@@ -364,17 +368,19 @@ class CardsGuessing(commands.Cog):
             # END GUESS
             # -------------------------
             if content == "endguess":
-                await ctx.followup.send(
+                buttons_view = Buttons(
+                    ctx,
+                    ["Play Again"],
+                    self.card_guess_helper,
+                    [filtered_cards_list],
+                )
+                sent = await ctx.followup.send(
                     f'Giving up? It was **{character["characterLastName"]} '
                     f'{character["characterName"]}** - **{card_name}**!',
                     file=answer,
-                    view=Buttons(
-                        ctx,
-                        ["Play Again"],
-                        self.card_guess_helper,
-                        [filtered_cards_list],
-                    ),
+                    view=buttons_view,
                 )
+                buttons_view.message = sent
                 return True
 
             # -------------------------

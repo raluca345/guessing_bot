@@ -10,6 +10,18 @@ class Buttons(discord.ui.View):
         self.callback = callback
         self.callback_args = callback_args if callback_args is not None else []
         self._starting = False  # guard flag
+        self.message = None
+
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except (discord.NotFound, discord.HTTPException):
+                pass  # message was deleted, nothing to do
+    
 
     @discord.ui.button(label="Play Again", style=discord.ButtonStyle.primary)
     async def play_again(self, button, interaction):

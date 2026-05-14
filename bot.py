@@ -27,7 +27,7 @@ bot = discord.Bot(intents=intents, activity=discord.Game(name="Guessing cards an
 
 # Load all cogs EXCEPT twt_hub (which is DEPRECATED and disabled by default).
 # The Twitter API free tier has been discontinued so this functionality can't be supported anymore
-cogs_list = [f.split(".")[0] for f in os.listdir(os.getcwd() + "/cogs") if not f.startswith("__") and f != "twt_hub"]
+cogs_list = [f.split(".")[0] for f in os.listdir(os.getcwd() + "/cogs") if not f.startswith("__") and f.split(".")[0] != "twt_hub"]
 logger.info(f"Loading cogs: {cogs_list}")
 
 for cog in cogs_list:
