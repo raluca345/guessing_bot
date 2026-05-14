@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from cogs.twt_hub import TwtHub
-from utility.constants import CGL_SERVER_ID, WEEK_ANNOUNCEMENT_CHANNEL
+from utility.constants import CGL_SERVER_ID, WEEK_ANNOUNCEMENT_CHANNEL, CGL_TWT_ACC_ID
 
 class AsyncIterator:
     def __init__(self, items):
@@ -18,6 +18,30 @@ class AsyncIterator:
             raise StopAsyncIteration
 
 class TestTwtHub:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "mock_tweet",
+        [
+            "Leafy Guessing League will be held on 01/04 (Wed)\n\nParticipate for fun!\n\nLeafy is here!"
+        ],
+        indirect=True
+    )
+    async def test_broadcast_tweets_to_channel_leafy_week(self, mock_tweet, mock_twt_hub, mock_channel, mock_role):
+        mock_twt_hub.bot.get_channel.return_value = mock_channel
+        mock_twt_hub.bot.get_guild.return_value.roles = [mock_role]
+        mock_emoji = MagicMock(__str__=lambda self: ":PensiveAiriStamp:")
+        mock_emoji.name = "PensiveAiriStamp"
+        mock_twt_hub.bot.get_guild.return_value.emojis = [mock_emoji]
+
+        await mock_twt_hub.handle_incoming_tweet(mock_tweet)
+
+        expected_message = (
+            "# Leafy Guessing League has been announced!\n\n"
+            "Participate to earn a Pensive Airi stamp :PensiveAiriStamp:!\n\n"
+            "@prskcgl tweeted https://x.com/prskcgl/status/1234567890\n@Week Announcement Ping"
+        )
+
+        mock_channel.send.assert_called_once_with(expected_message)
     @pytest.fixture
     def mock_bot(self):
         class MockBot:
@@ -70,14 +94,11 @@ class TestTwtHub:
     @pytest.fixture
     def mock_twt_hub(self, mock_bot, mock_character_storage):
         twt_hub = TwtHub(mock_bot)
-        twt_hub.client = AsyncMock()
         return twt_hub
 
     @pytest.fixture
-    def mock_twt(self, mock_twt_hub, request):
-        mock_twt_hub.client.get_users_tweets.return_value = MagicMock(
-            data=[MagicMock(id='1234567890', text=request.param)]
-        )
+    def mock_tweet(self, request):
+        return MagicMock(id="1234567890", text=request.param, author_id=str(CGL_TWT_ACC_ID))
 
     @pytest.fixture
     def mock_channel(self):
@@ -104,7 +125,7 @@ class TestTwtHub:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "mock_twt",
+        "mock_tweet",
         [
             "The Summer Special - Week 142 of Card Guessing League will be held on 19/07 (Sat)"
             "\n\nStarter League: 8pm JST"
@@ -113,7 +134,7 @@ class TestTwtHub:
         ],
         indirect=True
     )
-    async def test_broadcast_tweets_to_channel_normal_week(self, mock_twt, mock_twt_hub, mock_channel, mock_role):
+    async def test_broadcast_tweets_to_channel_normal_week(self, mock_tweet, mock_twt_hub, mock_channel, mock_role):
 
         mock_twt_hub.bot.get_channel.return_value = mock_channel
         mock_twt_hub.bot.get_guild.return_value.roles = [mock_role]
@@ -121,11 +142,7 @@ class TestTwtHub:
         mock_emoji.name = "ToyaStamp"
         mock_twt_hub.bot.get_guild.return_value.emojis = [mock_emoji]
 
-        print(f"Mock role mention: {mock_role.mention}")
-        print(f"Mock channel: {mock_channel}")
-        print(f"Mock emojis: {mock_twt_hub.bot.get_guild.return_value.emojis}")
-
-        await mock_twt_hub.broadcast_tweets_to_channel()
+        await mock_twt_hub.handle_incoming_tweet(mock_tweet)
 
         expected_message = (
             "# Week 142 has been announced!\n\n"
@@ -138,7 +155,7 @@ class TestTwtHub:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "mock_twt",
+        "mock_tweet",
         [
             "Week 141 of Card Guessing League will be held on 12/07 (Sat)"
             "\n\nStarter League: 8pm JST"
@@ -147,7 +164,7 @@ class TestTwtHub:
         ],
         indirect=True
     )
-    async def test_broadcast_tweets_to_channel_kizuna_week(self, mock_twt, mock_twt_hub, mock_channel, mock_role):
+    async def test_broadcast_tweets_to_channel_kizuna_week(self, mock_tweet, mock_twt_hub, mock_channel, mock_role):
         mock_twt_hub.bot.get_channel.return_value = mock_channel
         mock_twt_hub.bot.get_guild.return_value.roles = [mock_role]
         mock_emoji1 = MagicMock(__str__=lambda self: ":AkitoStamp:")
@@ -156,7 +173,7 @@ class TestTwtHub:
         mock_emoji2.name = "AnStamp"
         mock_twt_hub.bot.get_guild.return_value.emojis = [mock_emoji1, mock_emoji2]
 
-        await mock_twt_hub.broadcast_tweets_to_channel()
+        await mock_twt_hub.handle_incoming_tweet(mock_tweet)
 
         expected_message = (
             "# Week 141 has been announced!\n\n"
@@ -168,7 +185,7 @@ class TestTwtHub:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "mock_twt",
+        "mock_tweet",
         [
             "Shuffle Unit Week - Week 138 of Card Guessing League will be held on 21/06 (Sat)"
             "\n\nMain League: 10pm JST"
@@ -176,7 +193,7 @@ class TestTwtHub:
         ],
         indirect=True
     )
-    async def test_broadcast_tweets_to_channel_shuffle_unit_week(self, mock_twt, mock_twt_hub, mock_channel, mock_role):
+    async def test_broadcast_tweets_to_channel_shuffle_unit_week(self, mock_tweet, mock_twt_hub, mock_channel, mock_role):
         mock_twt_hub.bot.get_channel.return_value = mock_channel
         mock_twt_hub.bot.get_guild.return_value.roles = [mock_role]
         mock_emoji1 = MagicMock(__str__=lambda self: ":HonamiStamp:")
@@ -191,7 +208,7 @@ class TestTwtHub:
         mock_emoji5.name = "MeikoStamp"
         mock_twt_hub.bot.get_guild.return_value.emojis = [mock_emoji1, mock_emoji2, mock_emoji3, mock_emoji4, mock_emoji5]
 
-        await mock_twt_hub.broadcast_tweets_to_channel()
+        await mock_twt_hub.handle_incoming_tweet(mock_tweet)
 
         expected_message = (
             "# Shuffle Unit Week 138 has been announced!\n\n"
@@ -204,7 +221,7 @@ class TestTwtHub:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "mock_twt",
+        "mock_tweet",
         [
             "MORE MORE JUMP! Unit Week - Week 99 of Card Guessing League will be held on 21/09 (Sat)"
             "\n\nMain League: 10pm JST"
@@ -212,7 +229,7 @@ class TestTwtHub:
         ],
         indirect=True
     )
-    async def test_broadcast_tweets_to_channel_unit_week(self, mock_twt, mock_twt_hub, mock_channel, mock_role):
+    async def test_broadcast_tweets_to_channel_unit_week(self, mock_tweet, mock_twt_hub, mock_channel, mock_role):
         mock_twt_hub.bot.get_channel.return_value = mock_channel
         mock_twt_hub.bot.get_guild.return_value.roles = [mock_role]
         mock_emoji1 = MagicMock(__str__=lambda self: ":MinoriStamp:")
@@ -225,7 +242,7 @@ class TestTwtHub:
         mock_emoji4.name = "ShizukuStamp"
         mock_twt_hub.bot.get_guild.return_value.emojis = [mock_emoji1, mock_emoji2, mock_emoji3, mock_emoji4]
 
-        await mock_twt_hub.broadcast_tweets_to_channel()
+        await mock_twt_hub.handle_incoming_tweet(mock_tweet)
 
         expected_message = (
             "# MORE MORE JUMP! Unit Week 99 has been announced!\n\n"
@@ -238,7 +255,7 @@ class TestTwtHub:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "mock_twt",
+        "mock_tweet",
         [
             "The 2nd Anniversary Special - Week 106 of Card Guessing League will be held on 09/11 (Sat)"
             "\n\nStarter League - 8pm JST"
@@ -248,11 +265,11 @@ class TestTwtHub:
         ],
         indirect=True
     )
-    async def test_broadcast_tweets_to_channel_everyone_week(self, mock_twt, mock_twt_hub, mock_channel, mock_role):
+    async def test_broadcast_tweets_to_channel_everyone_week(self, mock_tweet, mock_twt_hub, mock_channel, mock_role):
         mock_twt_hub.bot.get_channel.return_value = mock_channel
         mock_twt_hub.bot.get_guild.return_value.roles = [mock_role]
 
-        await mock_twt_hub.broadcast_tweets_to_channel()
+        await mock_twt_hub.handle_incoming_tweet(mock_tweet)
 
         expected_message = (
             "# Week 106 has been announced!\n\n"
