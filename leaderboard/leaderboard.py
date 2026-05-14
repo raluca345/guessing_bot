@@ -1,19 +1,59 @@
 import discord
 from discord import Embed
 from discord.ext.pages import Page, Paginator
-from utility.utility_functions import connect
+from utility.utility_functions import connect, logger
 
 class Leaderboard:
 
-    user_lb = []
-
-    connection = connect()
-    cursor = connection.cursor(dictionary=True)
-
     def __init__(self) -> None:
+        self.connection = connect()
+        self.cursor = self.connection.cursor(dictionary=True)
+        self.user_lb = []
         self.get_data()
 
+    def _ensure_connection(self):
+        try:
+            self.connection.ping(reconnect=True, attempts=3, delay=2)
+        except Exception:
+            logger.warning("Database connection lost, reconnecting...")
+            try:
+                self.connection.close()
+            except Exception:
+                pass
+            self.connection = connect()
+        try:
+            if hasattr(self, "cursor") and self.cursor is not None:
+                try:
+                    self.cursor.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        self.cursor = self.connection.cursor(dictionary=True)
+
+    def close(self):
+        try:
+            if hasattr(self, "cursor") and self.cursor is not None:
+                try:
+                    self.cursor.close()
+                except Exception:
+                    pass
+                self.cursor = None
+        except Exception:
+            pass
+
+        try:
+            if hasattr(self, "connection") and self.connection is not None:
+                try:
+                    self.connection.close()
+                except Exception:
+                    pass
+                self.connection = None
+        except Exception:
+            pass
+
     def get_data(self):
+        self._ensure_connection()
         self.user_lb.clear()
 
         query = "SELECT user_id, points FROM leaderboard"
@@ -28,13 +68,14 @@ class Leaderboard:
             self.user_lb.append(usr)
 
     def add_users(self, user_list):
-
+        self._ensure_connection()
         query = "INSERT INTO leaderboard (user_id, points) VALUES (%(user_id)s, %(points)s) ON DUPLICATE KEY UPDATE points = points + VALUES(points)"
         self.cursor.executemany(query, user_list)
         self.connection.commit()
 
     def delete_user(self, user_id):
         try:
+            self._ensure_connection()
             query = "DELETE FROM leaderboard WHERE user_id = %s"
             self.cursor.execute(query, (user_id,))
             self.connection.commit()

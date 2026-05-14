@@ -9,6 +9,7 @@ from aiohttp import ClientSession
 from discord.ext import commands, tasks
 
 from storage.song_storage import SongStorage
+from storage.points_ledger_storage import PointsLedgerStorage
 from utility.utility_functions import *
 from views.buttons import Buttons
 
@@ -17,6 +18,7 @@ class LyricsGuessing(commands.Cog):
     def __init__(self, bot):
         self.song_list = SongStorage()
         self.bot = bot
+        self.ledger = PointsLedgerStorage()
         load_dotenv()
         self.s3 = connect_to_r2_storage()
         self.BUCKET_NAME = os.getenv("BUCKET_NAME")
@@ -26,6 +28,25 @@ class LyricsGuessing(commands.Cog):
             logger.exception("Failed to build song unit cache at startup")
     def cog_unload(self) -> None:
         self.update_song_list.cancel()
+        try:
+            if hasattr(self, 'song_list') and self.song_list is not None:
+                try:
+                    self.song_list.close()
+                except Exception:
+                    pass
+                self.song_list = None
+        except Exception:
+            pass
+
+        try:
+            if hasattr(self, 'ledger') and self.ledger is not None:
+                try:
+                    self.ledger.close()
+                except Exception:
+                    pass
+                self.ledger = None
+        except Exception:
+            pass
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -74,7 +95,10 @@ class LyricsGuessing(commands.Cog):
         song = random.choice(song_list_filtered_by_unit)
 
         logger.info(f"Song: {song}")
-        song_lyric = random.choice(lyrics[song["romaji_name"]])
+        #song_lyric = random.choice(lyrics[song["romaji_name"]])
+        # send 2 lyrics at once
+        song_lyrics_index = random.randint(0, max(0, len(lyrics[song["romaji_name"]]) - 2))
+        song_lyrics = "\n".join([lyrics[song["romaji_name"]][song_lyrics_index], lyrics[song["romaji_name"]][song_lyrics_index + 1]])
         song["aliases"] = [sub(pattern=PATTERN, repl="", string=s.lower()) for s in song["aliases"]]
 
         song_name = sanitize_file_name(song["romaji_name"]).replace(" ", "-")
@@ -84,11 +108,11 @@ class LyricsGuessing(commands.Cog):
         logger.info(jacket_key)
 
         if isinstance(ctx, discord.Interaction) or (not isinstance(ctx, discord.Interaction) and ctx.interaction.response.is_done()):
-            await ctx.followup.send(song_lyric)
+            await ctx.followup.send(song_lyrics)
         else:
-            await ctx.respond(song_lyric)
+            await ctx.respond(song_lyrics)
         try:
-            obj = self.s3.get_object(Bucket=self.BUCKET_NAME, Key=jacket_key)
+            obj = get_object_with_retry(self.s3, self.BUCKET_NAME, jacket_key)
             buffer = BytesIO(obj['Body'].read())
             buffer.seek(0)
             img = Image.open(buffer)
@@ -132,30 +156,64 @@ class LyricsGuessing(commands.Cog):
                 break
 
     async def check_guess(self, ctx, guess, song, buffer, song_list_filtered_by_unit, leaderboard):
+        if guess.content.lower().strip().startswith("."):
+            return False
+
         guessed_song = sub(pattern=PATTERN, string=guess.content.strip().lower(), repl="")
         guessed_song = guessed_song.replace(" ", "")
         guessed_song = guessed_song.strip()
 
-        if guessed_song in song["aliases"] or guessed_song == song["romaji_name"].lower():
-            await ctx.followup.send(f"Congrats {guess.author.mention}! You guessed **{song['romaji_name']}** correctly!",
-                                    file=discord.File(fp=buffer, filename="jacket.png"),
-                                    view=Buttons(ctx, ["Play Again"], self.guess_the_song,
-                                                 ["romaji", song["unit"]]))
+        if (
+            guessed_song in song["aliases"]
+            or guessed_song == song["romaji_name"].lower()
+            or guessed_song == sub(pattern=PATTERN, repl=" ", string=song["romaji_name"]).lower()
+            or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).lower()
+            or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).replace(" ", "")
+        ):
+            sent = await ctx.followup.send(
+                f"Congrats {guess.author.mention}! You guessed **{song['romaji_name']}** correctly!",
+                file=discord.File(fp=buffer, filename="jacket.png"),
+                view=Buttons(ctx, ["Play Again"], self.guess_the_song, ["romaji", song["unit"]])
+            )
             user_id = guess.author.id
+            guild_id = ctx.guild.id if ctx.guild else 0
+            channel_id = ctx.channel.id if ctx.channel else 0
+            # Non-blocking ledger insert
+            try:
+                await asyncio.to_thread(
+                    self.ledger.record_points,
+                    guild_id,
+                    channel_id,
+                    user_id,
+                    1,
+                    "lyrics_guess",
+                    song.get("id"),
+                    sent.id if sent else None,
+                )
+            except Exception:
+                logger.exception("Ledger insert failed")
             if leaderboard is not None:
                 await leaderboard.on_right_guess(user_id)
             else:
                 await ctx.followup.send("Error updating lb")
             return True
         elif guessed_song == "endguess":
-            await ctx.followup.send(f"Giving up? The song was **{song['romaji_name']}**!",
-                                    file=discord.File(fp=buffer, filename="jacket.png"),
-                                    view=Buttons(ctx, ["Play Again"], self.guess_the_song,
-                                                 ["romaji", song["unit"]]))
+            await ctx.followup.send(
+                f"Giving up? The song was **{song['romaji_name']}**!",
+                file=discord.File(fp=buffer, filename="jacket.png"),
+                view=Buttons(ctx, ["Play Again"], self.guess_the_song, ["romaji", song["unit"]])
+            )
             return True
         else:
-            temp = next((s["romaji_name"] for s in song_list_filtered_by_unit if
-                         guessed_song in s["aliases"] or guessed_song == s["romaji_name"].lower()), None)
+            temp = next(
+                (
+                    s["romaji_name"]
+                    for s in song_list_filtered_by_unit
+                    if guessed_song in [sub(pattern=PATTERN, repl="", string=a.lower()) for a in s["aliases"]]
+                    or guessed_song == sub(pattern=PATTERN, repl="", string=s["romaji_name"].lower()).replace(" ", "")
+                ),
+                None,
+            )
 
             if temp:
                 await ctx.followup.send(f"Nope, it's not **{temp}**, try again!")
@@ -199,7 +257,16 @@ class LyricsGuessing(commands.Cog):
 
     @tasks.loop(hours=24)
     async def update_song_list(self):
-        self.song_list.song_data = SongStorage()
+        try:
+            if hasattr(self, "song_list") and self.song_list is not None:
+                try:
+                    self.song_list.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        self.song_list = SongStorage()
         try:
             build_song_unit_cache(self.song_list.song_data)
         except Exception:

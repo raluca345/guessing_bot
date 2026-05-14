@@ -18,6 +18,30 @@ class AsyncIterator:
             raise StopAsyncIteration
 
 class TestTwtHub:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "mock_tweet",
+        [
+            "Leafy Guessing League will be held on 01/04 (Wed)\n\nParticipate for fun!\n\nLeafy is here!"
+        ],
+        indirect=True
+    )
+    async def test_broadcast_tweets_to_channel_leafy_week(self, mock_tweet, mock_twt_hub, mock_channel, mock_role):
+        mock_twt_hub.bot.get_channel.return_value = mock_channel
+        mock_twt_hub.bot.get_guild.return_value.roles = [mock_role]
+        mock_emoji = MagicMock(__str__=lambda self: ":PensiveAiriStamp:")
+        mock_emoji.name = "PensiveAiriStamp"
+        mock_twt_hub.bot.get_guild.return_value.emojis = [mock_emoji]
+
+        await mock_twt_hub.handle_incoming_tweet(mock_tweet)
+
+        expected_message = (
+            "# Leafy Guessing League has been announced!\n\n"
+            "Participate to earn a Pensive Airi stamp :PensiveAiriStamp:!\n\n"
+            "@prskcgl tweeted https://x.com/prskcgl/status/1234567890\n@Week Announcement Ping"
+        )
+
+        mock_channel.send.assert_called_once_with(expected_message)
     @pytest.fixture
     def mock_bot(self):
         class MockBot:

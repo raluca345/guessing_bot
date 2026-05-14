@@ -16,12 +16,27 @@ class Lb(commands.Cog):
         self.pages = []
         self.leaderboard = Leaderboard()
         self._update_lock = asyncio.Lock()
+        self._monitor_lock = asyncio.Lock()
+
+    def cog_unload(self) -> None:
+        try:
+            if hasattr(self, "leaderboard") and self.leaderboard is not None:
+                try:
+                    self.leaderboard.close()
+                except Exception:
+                    pass
+                self.leaderboard = None
+        except Exception:
+            pass
 
     @commands.Cog.listener()
     async def on_ready(self):
         await asyncio.sleep(600)
         if not self.leaderboard_update.is_running():
             self.leaderboard_update.start()
+            
+        if not self.monitor_db.is_running():
+            self.monitor_db.start()
 
     async def on_right_guess(self, user_id):
         user_ids = [x["user_id"] for x in self.lb_user_list]
@@ -47,6 +62,41 @@ class Lb(commands.Cog):
             self.pages = await self.create_lb()
             self.lb_user_list = []
             logger.info("Updated db!")
+        
+    @commands.is_owner()
+    @discord.slash_command(name="db_health", description="Owner: quick DB health check")
+    async def db_health(self, ctx: discord.ApplicationContext):
+        await ctx.defer()
+        try:
+            with temp_connect() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT 1")
+                one = cur.fetchone()
+                cur.execute("SHOW STATUS LIKE 'Threads_connected'")
+                threads = cur.fetchall()
+                cur.close()
+            await ctx.followup.send(f"DB OK: {one}, Threads_connected: {threads}")
+        except Exception as e:
+            logger.exception("DB health check failed")
+            await ctx.followup.send(f"DB ERROR: {e}")
+
+    @tasks.loop(minutes=5)
+    async def monitor_db(self):
+        async with self._monitor_lock:
+            try:
+                with temp_connect() as conn:
+                    if conn is None:
+                        logger.error("monitor_db: connect() returned None")
+                        return
+                    cur = conn.cursor()
+                    cur.execute("SELECT 1")
+                    one = cur.fetchone()
+                    cur.execute("SHOW STATUS LIKE 'Threads_connected'")
+                    threads = cur.fetchall()
+                    cur.close()
+                logger.info("monitor_db: SELECT 1 -> %s; Threads_connected: %s", one, threads)
+            except Exception as e:
+                logger.exception("monitor_db: DB ping failed: %s", e)
 
     @leaderboard_update.after_loop
     async def on_leaderboard_update_cancel(self):
@@ -70,17 +120,20 @@ class Lb(commands.Cog):
             user_id = u["user_id"]
             points = u["points"]
             try:
-                user_obj = self.bot.get_user(user_id)
-                if user_obj is None:
-                    try:
-                        user_obj = await self.bot.fetch_user(user_id)
-                    except discord.NotFound:
-                        logger.warning(f"[create_lb] User not found or not visible to bot: {user_id}")
-                        user_name = f"UnknownUser_{user_id}"
+                    user_obj = self.bot.get_user(user_id)
+                    if user_obj is None:
+                        try:
+                            @retry_async(retries=3, delay=2)
+                            async def fetch_user_with_retry(bot, uid):
+                                return await bot.fetch_user(uid)
+                            user_obj = await fetch_user_with_retry(self.bot, user_id)
+                        except (discord.NotFound, asyncio.TimeoutError, asyncio.CancelledError, aiohttp.ClientError) as e:
+                            logger.warning(f"[create_lb] User not found or not visible to bot: {user_id} ({e})")
+                            user_name = f"UnknownUser_{user_id}"
+                        else:
+                            user_name = user_obj.name
                     else:
                         user_name = user_obj.name
-                else:
-                    user_name = user_obj.name
 
             except Exception as e:
                 logger.exception(f"[create_lb] Failed fetching user {user_id}: {e}")
@@ -113,7 +166,8 @@ class Lb(commands.Cog):
                 else:
                     position = f"**{idx}.**"
 
-                leaderboard_content += f"{position} {user_name} - {points} points\n"
+                safe_name = discord.utils.escape_markdown(user_name)
+                leaderboard_content += f"{position} {safe_name} - {points} points\n"
 
             if not leaderboard_content:
                 leaderboard_content = "No entries"

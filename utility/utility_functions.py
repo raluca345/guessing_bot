@@ -11,14 +11,34 @@ from io import BytesIO
 import mysql.connector
 from PIL import Image
 from dotenv import load_dotenv
-from rembg import remove, new_session
+from contextlib import contextmanager
 
 from utility.constants import *
 import boto3
 from botocore.client import Config
+import asyncio
+import aiohttp
+from functools import wraps
 
+# Retry decorator for async network operations
+def retry_async(retries=3, delay=2, backoff=2, exceptions=(aiohttp.ClientError, asyncio.TimeoutError, asyncio.CancelledError)):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            _retries, _delay = retries, delay
+            for attempt in range(_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except exceptions as e:
+                    logger.warning(f"Retryable error in {func.__name__}: {e}. Attempt {attempt+1}/{_retries}")
+                    if attempt == _retries - 1:
+                        logger.error(f"Max retries reached for {func.__name__}")
+                        raise
+                    await asyncio.sleep(_delay)
+                    _delay *= backoff
+        return wrapper
+    return decorator
 
-session = new_session("isnet-anime")
 
 # db configuration
 
@@ -48,6 +68,13 @@ active_session = defaultdict(bool)
 
 #dict of locks to prevent the active_session dict from not being updated to false at the end of a session
 lock = {}
+
+def get_active_session_lock(channel_id: int) -> asyncio.Lock:
+    existing = lock.get(channel_id)
+    if existing is None:
+        existing = asyncio.Lock()
+        lock[channel_id] = existing
+    return existing
 
 load_dotenv()
 
@@ -82,63 +109,127 @@ def connect_to_r2_storage():
     return s3
 
 
+def get_object_with_retry(s3, bucket, key, retries=3, delay=2):
+    """Fetch an object from S3/R2 with retries and logging.
+
+    Returns the object dict on success or raises the final exception.
+    """
+    attempt = 1
+    while attempt <= retries:
+        try:
+            logger.info("Fetching R2 object (attempt %d/%d): %s/%s", attempt, retries, bucket, key)
+            obj = s3.get_object(Bucket=bucket, Key=key)
+            # log content length when available
+            headers = obj.get('ResponseMetadata', {}).get('HTTPHeaders', {})
+            content_length = headers.get('content-length') or obj.get('ContentLength')
+            logger.info("Fetched object %s (size=%s)", key, content_length)
+            return obj
+        except Exception as e:
+            logger.warning("Failed fetching %s (attempt %d/%d): %s", key, attempt, retries, e)
+            if attempt == retries:
+                logger.exception("Exceeded retries fetching %s from bucket %s", key, bucket)
+                raise
+            time.sleep(delay * attempt)
+            attempt += 1
+
+
 def get_mask_from_r2(s3, bucket, mask_key):
     obj = s3.get_object(Bucket=bucket, Key=mask_key)
-    return np.load(BytesIO(obj["Body"].read()))
+    loaded = np.load(BytesIO(obj["Body"].read()))
+    if isinstance(loaded, np.lib.npyio.NpzFile):
+        try:
+            if "alpha" in loaded.files:
+                return loaded["alpha"]
+            raise ValueError(f"Compressed mask archive at '{mask_key}' is missing 'alpha'.")
+        finally:
+            loaded.close()
+
+    raise ValueError(f"Unsupported mask format for '{mask_key}'. Expected compressed .npz data.")
 
 
 # low level method
 def connect_to_db(config, attempts=3, delay=2):
     attempt = 1
-    # connection routine
-    while attempt < attempts + 1:
+    while attempt <= attempts:
         try:
-            return mysql.connector.connect(**config, pool_name="pool", pool_size=5)
+            return mysql.connector.connect(**config, pool_name="pool", pool_size=10)
         except (mysql.connector.Error, IOError) as e:
-            if attempts is attempt:
-                # all attempts failed
+            if attempt >= attempts:
                 logger.error("Failed to connect, exiting without a connection: %s", e)
+                return None
+
             logger.info(
                 "Connection failed: %s. Retrying (%d/%d)...",
                 e,
                 attempt,
-                attempts - 1,
+                attempts,
             )
-            # progressive reconnect delay
             time.sleep(delay ** attempt)
             attempt += 1
+
     return None
+
+
+@contextmanager
+def temp_connect():
+    """Context manager that yields a DB connection and ensures it is closed.
+
+    Use this for short-lived DB work to guarantee connections are returned to
+    the pool even on error.
+    """
+    conn = connect()
+    try:
+        yield conn
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
 
 
 
 def generate_foreground_crop_from_mask(orig_img, alpha, crop_size, min_fg_ratio=0.12):
+    width = orig_img.width
+    height = orig_img.height
 
-    if crop_size >= orig_img.width or crop_size >= orig_img.height:
+    # same guard idea as normal crop
+    if crop_size >= width or crop_size >= height:
         return orig_img.copy()
 
     ys, xs = np.where(alpha > 0)
 
+    # if mask failed → behave exactly like normal crop
     if len(xs) == 0:
         return generate_img_crop(orig_img, crop_size)
 
-    for _ in range(4):
+    last_box = None
+    for _ in range(4):  # try a few foreground-biased crops
+        # pick a random foreground pixel as anchor
         i = randrange(len(xs))
         cx, cy = xs[i], ys[i]
 
-        left = cx - crop_size // 2
-        top = cy - crop_size // 2
+        # convert center → top-left (like normal crop uses x1,y1)
+        x1 = cx - crop_size // 2
+        y1 = cy - crop_size // 2
 
-        left = max(0, min(left, orig_img.width - crop_size))
-        top = max(0, min(top, orig_img.height - crop_size))
+        # clamp like bounds-safe random crop
+        x1 = max(0, min(x1, width - crop_size))
+        y1 = max(0, min(y1, height - crop_size))
 
-        right = left + crop_size
-        bottom = top + crop_size
+        box = (x1, y1, x1 + crop_size, y1 + crop_size)
+        last_box = box
 
-        patch = alpha[top:bottom, left:right]
+        # foreground coverage check
+        patch = alpha[y1:y1 + crop_size, x1:x1 + crop_size]
         if (patch > 0).mean() >= min_fg_ratio:
-            return orig_img.crop((left, top, right, bottom))
+            return orig_img.crop(box)
 
+    # fallback → return the last generated crop
+    if last_box is not None:
+        return orig_img.crop(last_box)
     return generate_img_crop(orig_img, crop_size)
+
 
 
 
@@ -149,35 +240,6 @@ def generate_img_crop(img: Image.Image, crop_size):
     y1 = randint(0, height - crop_size - 1)
     box = (x1, y1, x1 + crop_size, y1 + crop_size)
     return img.crop(box)
-
-def remove_twostar_bg(img: Image.Image):
-    img = remove(img)
-    return img
-
-
-def prepare_twostar_image(img: Image.Image) -> Image.Image:
-    try:
-        processed = remove_twostar_bg(img)
-        try:
-            processed = processed.convert("RGBA")
-        except Exception:
-            # fallback: convert to RGB then to RGBA
-            try:
-                processed = processed.convert("RGB").convert("RGBA")
-            except Exception:
-                # give up and return the original crop as RGBA if possible
-                try:
-                    return img.convert("RGBA")
-                except Exception:
-                    return img
-
-        return processed
-    except Exception:
-        logger.exception("Failed to prepare 2* image; returning original")
-        try:
-            return img.convert("RGBA")
-        except Exception:
-            return img
 
 
 def four_star_filter(cards):
@@ -235,7 +297,7 @@ def birthday5_filter(cards):
 
 
 def sanrio_filter(cards):
-    filtered_cards = [c for c in cards if c["prefix"].strip().startswith("feat.")]
+    filtered_cards = [c for c in cards if c["id"] in SANRIO_CARDS_IDS]
     return filtered_cards
 
 
@@ -321,23 +383,6 @@ def clear_song_unit_cache():
     """
     global song_unit_cache
     song_unit_cache.clear()
-
-
-def get_or_build_mask(card_key: str, img: Image.Image):
-    """
-    card_key = unique key like '123_normal' or '123_after'
-    img      = original PIL image
-    """
-    global mask_cache
-    cached = mask_cache.get(card_key)
-    if cached is not None:
-        return cached
-
-    fg = prepare_twostar_image(img)          # runs rembg once
-    alpha = np.array(fg.getchannel("A"))     # store just mask
-
-    mask_cache[card_key] = alpha
-    return alpha
 
 
 
