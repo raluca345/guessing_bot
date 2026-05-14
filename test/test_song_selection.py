@@ -6,7 +6,7 @@ from collections import Counter
 import pytest
 from scipy import stats
 
-from utility.utility_functions import filter_songs_by_unit
+from utility.filters import filter_songs_by_unit
 
 
 def _make_song(song_id: int, name: str, unit: str = "Leo/need") -> dict:

@@ -6,7 +6,8 @@ from discord.ext import commands, tasks
 from discord.ext.pages import Page
 
 from leaderboard.leaderboard import Leaderboard
-from utility.utility_functions import *
+from utility.utility_functions import logger
+from utility.db import temp_connect
 
 
 class Lb(commands.Cog):

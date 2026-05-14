@@ -1,7 +1,8 @@
 import discord
 from discord import Embed
 from discord.ext.pages import Page, Paginator
-from utility.utility_functions import connect, logger
+from utility.utility_functions import logger
+from utility.db import connect
 
 class Leaderboard:
 
