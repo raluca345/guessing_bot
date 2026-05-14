@@ -21,7 +21,36 @@ class Leaderboard:
             except Exception:
                 pass
             self.connection = connect()
+        try:
+            if hasattr(self, "cursor") and self.cursor is not None:
+                try:
+                    self.cursor.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
         self.cursor = self.connection.cursor(dictionary=True)
+
+    def close(self):
+        try:
+            if hasattr(self, "cursor") and self.cursor is not None:
+                try:
+                    self.cursor.close()
+                except Exception:
+                    pass
+                self.cursor = None
+        except Exception:
+            pass
+
+        try:
+            if hasattr(self, "connection") and self.connection is not None:
+                try:
+                    self.connection.close()
+                except Exception:
+                    pass
+                self.connection = None
+        except Exception:
+            pass
 
     def get_data(self):
         self._ensure_connection()
