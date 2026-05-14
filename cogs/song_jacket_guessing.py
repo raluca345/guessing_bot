@@ -153,17 +153,9 @@ class SongJacketGuessing(commands.Cog):
         if guess.content.lower().strip().startswith("."):
             return False
 
-        guessed_song = sub(pattern=PATTERN, string=guess.content.strip().lower(), repl="")
-        guessed_song = guessed_song.replace(" ", "")
-        guessed_song = guessed_song.strip()  # making sure trailing spaces are really gone
-        logger.info("guess - %s", guessed_song)
-        if (
-            guessed_song in song["aliases"]
-            or guessed_song == song["romaji_name"].lower()
-            or guessed_song == sub(pattern=PATTERN, repl=" ", string=song["romaji_name"]).lower()
-            or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).lower()
-            or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).replace(" ", "")
-        ):
+        guessed_raw = guess.content.strip()
+
+        if guess_matches(guessed_raw, song["romaji_name"], song["aliases"]):
             logger.info(unit)
             buttons_view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
             sent = await ctx.followup.send(
@@ -195,7 +187,7 @@ class SongJacketGuessing(commands.Cog):
                 await ctx.followup.send("Error updating lb")
                 logger.error("Error updating lb")
             return True
-        elif guessed_song == "endguess":
+        elif guessed_raw.lower().strip() == "endguess":
             endguess_answer = discord.File(fp=BytesIO(answer_bytes), filename="answer.png")
             buttons_view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
             sent = await ctx.followup.send(
@@ -206,12 +198,12 @@ class SongJacketGuessing(commands.Cog):
             buttons_view.message = sent
             return True
         else:
+            # Check if guess matches any other song in the list to provide a hint
             temp = next(
                 (
                     s["romaji_name"]
                     for s in song_list_filtered_by_unit
-                    if guessed_song in [sub(pattern=PATTERN, repl="", string=a.lower()) for a in s["aliases"]]
-                    or guessed_song == sub(pattern=PATTERN, repl="", string=s["romaji_name"].lower()).replace(" ", "")
+                    if guess_matches(guessed_raw, s["romaji_name"], s["aliases"])
                 ),
                 None,
             )

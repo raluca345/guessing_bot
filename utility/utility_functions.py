@@ -496,3 +496,38 @@ def get_cached_card_filter(name, cards=None):
     if name == 'movie':
         return movie_filter(cards)
     return []
+
+
+# Song guessing helper functions
+def sanitize_guess(raw_guess: str) -> str:
+    """Sanitize a user's raw guess for comparison.
+    
+    Removes special characters (?, !, ', etc.) and normalizes whitespace.
+    """
+    guessed = sub(pattern=PATTERN, string=raw_guess.strip().lower(), repl="")
+    guessed = guessed.replace(" ", "")
+    return guessed.strip()
+
+
+def sanitize_aliases(aliases: list[str]) -> list[str]:
+    """Sanitize song aliases for comparison.
+    
+    Removes special characters and converts to lowercase.
+    """
+    return [sub(pattern=PATTERN, repl="", string=s.lower()) for s in aliases]
+
+
+def guess_matches(raw_guess: str, romaji_name: str, aliases: list[str]) -> bool:
+    """Check if a user's guess matches the song name or any alias.
+    
+    Args:
+        raw_guess: The raw user guess
+        romaji_name: The canonical romaji name of the song
+        aliases: List of aliases for the song
+    
+    Returns:
+        True if the guess matches the song name or an alias (after sanitization)
+    """
+    guessed = sanitize_guess(raw_guess)
+    clean_aliases = sanitize_aliases(aliases)
+    return guessed in clean_aliases or guessed == romaji_name.lower()
