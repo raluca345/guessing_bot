@@ -11,10 +11,33 @@ from io import BytesIO
 import mysql.connector
 from PIL import Image
 from dotenv import load_dotenv
+from contextlib import contextmanager
 
 from utility.constants import *
 import boto3
 from botocore.client import Config
+import asyncio
+import aiohttp
+from functools import wraps
+
+# Retry decorator for async network operations
+def retry_async(retries=3, delay=2, backoff=2, exceptions=(aiohttp.ClientError, asyncio.TimeoutError, asyncio.CancelledError)):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            _retries, _delay = retries, delay
+            for attempt in range(_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except exceptions as e:
+                    logger.warning(f"Retryable error in {func.__name__}: {e}. Attempt {attempt+1}/{_retries}")
+                    if attempt == _retries - 1:
+                        logger.error(f"Max retries reached for {func.__name__}")
+                        raise
+                    await asyncio.sleep(_delay)
+                    _delay *= backoff
+        return wrapper
+    return decorator
 
 
 # db configuration
@@ -45,6 +68,13 @@ active_session = defaultdict(bool)
 
 #dict of locks to prevent the active_session dict from not being updated to false at the end of a session
 lock = {}
+
+def get_active_session_lock(channel_id: int) -> asyncio.Lock:
+    existing = lock.get(channel_id)
+    if existing is None:
+        existing = asyncio.Lock()
+        lock[channel_id] = existing
+    return existing
 
 load_dotenv()
 
@@ -79,32 +109,83 @@ def connect_to_r2_storage():
     return s3
 
 
+def get_object_with_retry(s3, bucket, key, retries=3, delay=2):
+    """Fetch an object from S3/R2 with retries and logging.
+
+    Returns the object dict on success or raises the final exception.
+    """
+    attempt = 1
+    while attempt <= retries:
+        try:
+            logger.info("Fetching R2 object (attempt %d/%d): %s/%s", attempt, retries, bucket, key)
+            obj = s3.get_object(Bucket=bucket, Key=key)
+            # log content length when available
+            headers = obj.get('ResponseMetadata', {}).get('HTTPHeaders', {})
+            content_length = headers.get('content-length') or obj.get('ContentLength')
+            logger.info("Fetched object %s (size=%s)", key, content_length)
+            return obj
+        except Exception as e:
+            logger.warning("Failed fetching %s (attempt %d/%d): %s", key, attempt, retries, e)
+            if attempt == retries:
+                logger.exception("Exceeded retries fetching %s from bucket %s", key, bucket)
+                raise
+            time.sleep(delay * attempt)
+            attempt += 1
+
+
 def get_mask_from_r2(s3, bucket, mask_key):
     obj = s3.get_object(Bucket=bucket, Key=mask_key)
-    return np.load(BytesIO(obj["Body"].read()))
+    loaded = np.load(BytesIO(obj["Body"].read()))
+    if isinstance(loaded, np.lib.npyio.NpzFile):
+        try:
+            if "alpha" in loaded.files:
+                return loaded["alpha"]
+            raise ValueError(f"Compressed mask archive at '{mask_key}' is missing 'alpha'.")
+        finally:
+            loaded.close()
+
+    raise ValueError(f"Unsupported mask format for '{mask_key}'. Expected compressed .npz data.")
 
 
 # low level method
 def connect_to_db(config, attempts=3, delay=2):
     attempt = 1
-    # connection routine
-    while attempt < attempts + 1:
+    while attempt <= attempts:
         try:
             return mysql.connector.connect(**config, pool_name="pool", pool_size=10)
         except (mysql.connector.Error, IOError) as e:
-            if attempts is attempt:
-                # all attempts failed
+            if attempt >= attempts:
                 logger.error("Failed to connect, exiting without a connection: %s", e)
+                return None
+
             logger.info(
                 "Connection failed: %s. Retrying (%d/%d)...",
                 e,
                 attempt,
-                attempts - 1,
+                attempts,
             )
-            # progressive reconnect delay
             time.sleep(delay ** attempt)
             attempt += 1
+
     return None
+
+
+@contextmanager
+def temp_connect():
+    """Context manager that yields a DB connection and ensures it is closed.
+
+    Use this for short-lived DB work to guarantee connections are returned to
+    the pool even on error.
+    """
+    conn = connect()
+    try:
+        yield conn
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
 
 
 

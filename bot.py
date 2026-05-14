@@ -1,25 +1,49 @@
 import os
+import re
+import asyncio
+import signal
+import csv
+from collections import defaultdict
+from io import StringIO
 
+import aiohttp
 import discord
 from discord.ext import tasks, commands
 from dotenv import load_dotenv
 
 from utility.utility_functions import logger, active_session
 from utility.constants import *
+from datetime import datetime, timezone
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.messages = True
 intents.dm_messages = True
 intents.guilds = True
+intents.members = True
+
 
 bot = discord.Bot(intents=intents, activity=discord.Game(name="Guessing cards and songs"))
 
-cogs_list = [f.split(".")[0] for f in os.listdir(os.getcwd() + "/cogs") if not f.startswith("__")]
-logger.info(cogs_list)
+# Load all cogs EXCEPT twt_hub (which is DEPRECATED and disabled by default).
+# The Twitter API free tier has been discontinued so this functionality can't be supported anymore
+cogs_list = [f.split(".")[0] for f in os.listdir(os.getcwd() + "/cogs") if not f.startswith("__") and f != "twt_hub"]
+logger.info(f"Loading cogs: {cogs_list}")
 
 for cog in cogs_list:
     bot.load_extension(f'cogs.{cog}')
+
+
+SKIP_CHANNEL_IDS: set[int] = {1074836993575501826}
+SKIP_CHANNEL_NAMES = {"cgl-lounge"}
+
+
+
+# 2026-02-25 19:39 CET = 18:39 UTC
+OUTAGE_AFTER = datetime(2026, 2, 25, 18, 39, tzinfo=timezone.utc)
+
+# adjust if you know when it ended
+OUTAGE_BEFORE = datetime(2026, 2, 26, 5, 36, tzinfo=timezone.utc)
 
 @bot.event
 async def on_ready():
@@ -49,6 +73,15 @@ async def on_command_error(ctx: discord.ApplicationContext, error):
         except:
             try:
                 await ctx.channel.send("A network error occurred. Please try again!", ephemeral=True)
+            except:
+                logger.error(f"Cannot send any messages to channel {ctx.channel_id}")
+    elif isinstance(error, (asyncio.TimeoutError, asyncio.CancelledError)):
+        logger.error(f"Network timeout/cancelled in channel {ctx.channel_id}: {error}")
+        try:
+            await ctx.followup.send("Network timeout occurred. Please try again!", ephemeral=True)
+        except:
+            try:
+                await ctx.channel.send("Network timeout occurred. Please try again!", ephemeral=True)
             except:
                 logger.error(f"Cannot send any messages to channel {ctx.channel_id}")
     else:
@@ -83,5 +116,18 @@ async def check_server_permissions(channel_id):
     logger.info("Can the bot view this channel's history? %s",
                 channel.permissions_for(server.me).read_message_history)
 
+
+def shutdown_handler(signum, frame):
+    """Handle SIGTERM and gracefully close the bot"""
+    logger.info("Received shutdown signal, closing bot gracefully...")
+    try:
+        loop = asyncio.get_event_loop()
+        loop.create_task(bot.close())
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+
+
+signal.signal(signal.SIGTERM, shutdown_handler)
+signal.signal(signal.SIGINT, shutdown_handler)
 
 bot.run(os.getenv("TOKEN"))
