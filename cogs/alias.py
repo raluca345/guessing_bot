@@ -14,6 +14,17 @@ class Alias(commands.Cog):
         self.character_list = CharacterStorage()
         self.chara_name_list = [c["characterName"] for c in self.character_list.characters_data]
 
+    def cog_unload(self) -> None:
+        try:
+            if hasattr(self, 'song_list') and self.song_list is not None:
+                try:
+                    self.song_list.close()
+                except Exception:
+                    pass
+                self.song_list = None
+        except Exception:
+            pass
+
     alias = discord.SlashCommandGroup(name="alias", description="Song or charcter aliases related commands")
 
 

@@ -9,6 +9,7 @@ from aiohttp import ClientSession
 from discord.ext import commands, tasks
 
 from storage.song_storage import SongStorage
+from storage.points_ledger_storage import PointsLedgerStorage
 from utility.utility_functions import *
 from views.buttons import Buttons
 
@@ -17,6 +18,7 @@ class SongJacketGuessing(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.song_list = SongStorage()
+        self.ledger = PointsLedgerStorage()
         load_dotenv()
         self.s3 = connect_to_r2_storage()
         self.BUCKET_NAME = os.getenv("BUCKET_NAME")
@@ -27,6 +29,25 @@ class SongJacketGuessing(commands.Cog):
 
     def cog_unload(self) -> None:
         self.update_song_list.cancel()
+        try:
+            if hasattr(self, 'song_list') and self.song_list is not None:
+                try:
+                    self.song_list.close()
+                except Exception:
+                    pass
+                self.song_list = None
+        except Exception:
+            pass
+
+        try:
+            if hasattr(self, 'ledger') and self.ledger is not None:
+                try:
+                    self.ledger.close()
+                except Exception:
+                    pass
+                self.ledger = None
+        except Exception:
+            pass
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -75,11 +96,11 @@ class SongJacketGuessing(commands.Cog):
             logger.info(jacket_key)
 
             try:
-                obj = self.s3.get_object(Bucket=self.BUCKET_NAME, Key=jacket_key)
+                obj = get_object_with_retry(self.s3, self.BUCKET_NAME, jacket_key)
                 buffer = BytesIO(obj['Body'].read())
                 img = Image.open(buffer)
             except Exception as e:
-                logger.error(f"Error fetching image from R2: {e}")
+                logger.error("Error fetching image from R2: %s", e)
                 user = await self.bot.fetch_user(OWNER_ID)
                 await user.send("Error fetching song jacket from R2")
                 if isinstance(ctx, discord.Interaction) or (not isinstance(ctx, discord.Interaction) and ctx.interaction.response.is_done()):
@@ -134,16 +155,36 @@ class SongJacketGuessing(commands.Cog):
         guessed_song = guessed_song.replace(" ", "")
         guessed_song = guessed_song.strip()  # making sure trailing spaces are really gone
         logger.info("guess - %s", guessed_song)
-        if guessed_song in song["aliases"] or guessed_song == song[
-            "romaji_name"].lower() or guessed_song == sub(pattern=PATTERN, repl=" ", string=song[
-            "romaji_name"]).lower() or guessed_song == sub(pattern=PATTERN, repl="", string=song[
-            "romaji_name"]).lower() or guessed_song == sub(pattern=PATTERN, repl="",
-                                                           string=song["romaji_name"]).replace(" ", ""):
+        if (
+            guessed_song in song["aliases"]
+            or guessed_song == song["romaji_name"].lower()
+            or guessed_song == sub(pattern=PATTERN, repl=" ", string=song["romaji_name"]).lower()
+            or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).lower()
+            or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).replace(" ", "")
+        ):
             logger.info(unit)
-            await ctx.followup.send(f"Congrats {guess.author.mention}! You guessed **{song['romaji_name']}** correctly!",
-                        file=answer,
-                        view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit]))
+            sent = await ctx.followup.send(
+                f"Congrats {guess.author.mention}! You guessed **{song['romaji_name']}** correctly!",
+                file=answer,
+                view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
+            )
             user_id = guess.author.id
+            guild_id = ctx.guild.id if ctx.guild else 0
+            channel_id = ctx.channel.id if ctx.channel else 0
+            # Non-blocking ledger insert
+            try:
+                await asyncio.to_thread(
+                    self.ledger.record_points,
+                    guild_id,
+                    channel_id,
+                    user_id,
+                    1,
+                    "song_jacket_guess",
+                    song.get("id"),
+                    sent.id if sent else None,
+                )
+            except Exception:
+                logger.exception("Ledger insert failed")
             if leaderboard is not None:
                 await leaderboard.on_right_guess(user_id)
             else:
@@ -152,16 +193,22 @@ class SongJacketGuessing(commands.Cog):
             return True
         elif guessed_song == "endguess":
             endguess_answer = discord.File(fp=BytesIO(answer_bytes), filename="answer.png")
-            await ctx.followup.send(f"Giving up? The song was **{song['romaji_name']}**!", file=endguess_answer,
-                                    view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit]))
+            await ctx.followup.send(
+                f"Giving up? The song was **{song['romaji_name']}**!",
+                file=endguess_answer,
+                view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
+            )
             return True
         else:
-            # find a song that matches the incorrect guess
             temp = next(
-                (s["romaji_name"] for s in song_list_filtered_by_unit if
-                 guessed_song in [sub(pattern=PATTERN, repl="", string=a.lower()) for a in s["aliases"]]
-                 or guessed_song == sub(pattern=PATTERN, repl="", string=s["romaji_name"].lower()).replace(" ", "")),
-                None)
+                (
+                    s["romaji_name"]
+                    for s in song_list_filtered_by_unit
+                    if guessed_song in [sub(pattern=PATTERN, repl="", string=a.lower()) for a in s["aliases"]]
+                    or guessed_song == sub(pattern=PATTERN, repl="", string=s["romaji_name"].lower()).replace(" ", "")
+                ),
+                None,
+            )
 
             if temp:
                 await ctx.followup.send(f"Nope, it's not **{temp}**, try again!")
@@ -171,7 +218,16 @@ class SongJacketGuessing(commands.Cog):
 
     @tasks.loop(hours=24)
     async def update_song_list(self):
-        self.song_list.song_data = SongStorage()
+        try:
+            if hasattr(self, "song_list") and self.song_list is not None:
+                try:
+                    self.song_list.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        self.song_list = SongStorage()
         # rebuild cache after updating the song list
         try:
             build_song_unit_cache(self.song_list.song_data)
