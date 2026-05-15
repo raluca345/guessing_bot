@@ -1,19 +1,13 @@
 import os
-import re
 import asyncio
 import signal
-import csv
-from collections import defaultdict
-from io import StringIO
 
-import aiohttp
 import discord
-from discord.ext import tasks, commands
+from discord.ext import commands
 from dotenv import load_dotenv
 
 from utility.utility_functions import logger, active_session
 from utility.constants import *
-from datetime import datetime, timezone
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -27,7 +21,7 @@ bot = discord.Bot(intents=intents, activity=discord.Game(name="Guessing cards an
 
 # Load all cogs EXCEPT twt_hub (which is DEPRECATED and disabled by default).
 # The Twitter API free tier has been discontinued so this functionality can't be supported anymore
-cogs_list = [f.split(".")[0] for f in os.listdir(os.getcwd() + "/cogs") if not f.startswith("__") and f.split(".")[0] != "twt_hub"]
+cogs_list = [f.split(".")[0] for f in os.listdir(os.getcwd() + "/cogs") if not f.startswith("__") and f.split(".")[0] not in ["twt_hub", "base_guessing_cog"]]
 logger.info(f"Loading cogs: {cogs_list}")
 
 for cog in cogs_list:
@@ -38,12 +32,22 @@ SKIP_CHANNEL_IDS: set[int] = {1074836993575501826}
 SKIP_CHANNEL_NAMES = {"cgl-lounge"}
 
 
+async def send_error_message(ctx: discord.ApplicationContext, message: str) -> bool:
+    """Try to send error message. Returns True if sent."""
+    try:
+        # Try followup first (works if ctx was deferred)
+        await ctx.followup.send(message, ephemeral=True)
+        return True
+    except (discord.NotFound, discord.HTTPException, AttributeError):
+        pass
+    try:
+        # Fallback to channel send
+        await ctx.channel.send(message)
+        return True
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+    return False
 
-# 2026-02-25 19:39 CET = 18:39 UTC
-OUTAGE_AFTER = datetime(2026, 2, 25, 18, 39, tzinfo=timezone.utc)
-
-# adjust if you know when it ended
-OUTAGE_BEFORE = datetime(2026, 2, 26, 5, 36, tzinfo=timezone.utc)
 
 @bot.event
 async def on_ready():
@@ -54,46 +58,34 @@ async def on_ready():
 
 @bot.event
 async def on_command_error(ctx: discord.ApplicationContext, error):
-    active_session[ctx.channel_id] = False
+    """Handle command errors and reset session state."""
+    if ctx.channel_id:
+        active_session[ctx.channel_id] = False
     
+    # Log the error with context
+    logger.error(f"Error in channel {ctx.channel_id}: {type(error).__name__}: {error}")
+    
+    # Determine user-facing message based on error type
     if isinstance(error, discord.NotFound):
-        logger.error(f"Interaction not found in channel {ctx.channel_id}: {error}")
-        try:
-            await ctx.channel.send("The interaction timed out. Please try the command again.", ephemeral=True)
-        except discord.Forbidden:
-            logger.error(f"Cannot send messages to channel {ctx.channel_id}")
-        except Exception as e:
-            logger.error(f"Failed to send error message to channel {ctx.channel_id}: {e}")
+        user_message = "The interaction timed out. Please try the command again."
+
     elif isinstance(error, discord.Forbidden):
-        logger.error(f"Missing permissions in channel {ctx.channel_id}: {error}")
-    elif isinstance(error, discord.HTTPException):
-        logger.error(f"HTTP error in channel {ctx.channel_id}: {error}")
-        try:
-            await ctx.followup.send("A network error occurred. Please try again!", ephemeral=True)
-        except:
-            try:
-                await ctx.channel.send("A network error occurred. Please try again!", ephemeral=True)
-            except:
-                logger.error(f"Cannot send any messages to channel {ctx.channel_id}")
-    elif isinstance(error, (asyncio.TimeoutError, asyncio.CancelledError)):
-        logger.error(f"Network timeout/cancelled in channel {ctx.channel_id}: {error}")
-        try:
-            await ctx.followup.send("Network timeout occurred. Please try again!", ephemeral=True)
-        except:
-            try:
-                await ctx.channel.send("Network timeout occurred. Please try again!", ephemeral=True)
-            except:
-                logger.error(f"Cannot send any messages to channel {ctx.channel_id}")
-    else:
-        try:
-            await ctx.followup.send("Something went wrong, please try again!", ephemeral=True)
-        except:
-            try:
-                await ctx.channel.send("Something went wrong, please try again!", ephemeral=True)
-            except:
-                logger.error(f"Cannot send any messages to channel {ctx.channel_id}")
+        logger.error(f"Missing permissions in channel {ctx.channel_id}")
+        return  # Can't send messages if forbidden
     
-    logger.error(f"Error in channel {ctx.channel_id}: {error}")
+    elif isinstance(error, (asyncio.TimeoutError, asyncio.CancelledError)):
+        user_message = "Network timeout occurred. Please try again!"
+
+    elif isinstance(error, discord.HTTPException):
+        user_message = "A network error occurred. Please try again!"
+        
+    else:
+        user_message = "Something went wrong. Please try again!"
+    
+    # Try to send error message to user
+    if not await send_error_message(ctx, user_message):
+        logger.error(f"Failed to send error message to channel {ctx.channel_id}")
+
 
 @bot.command(name="reload", guild_ids=[1076494695204659220],
             default_member_permissions=discord.Permissions(administrator=True))

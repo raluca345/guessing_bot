@@ -62,6 +62,7 @@ class SongJacketGuessing(commands.Cog):
 
     @discord.slash_command(name="songjacketguess", description="Guess the song from a crop of its jacket!")
     async def song_jacket_guess(self, ctx: discord.ApplicationContext, unit: discord.Option(str, choices=UNITS)):  # type: ignore
+        await ctx.defer()
         song_list_filtered_by_unit = []
         ch_id = (ctx.channel.id if isinstance(ctx, discord.Interaction) else ctx.channel_id)
         if active_session[ch_id]:
@@ -73,10 +74,6 @@ class SongJacketGuessing(commands.Cog):
         active_session[ch_id] = True
 
         try:
-            if not isinstance(ctx, discord.Interaction):
-                if not ctx.interaction.response.is_done():
-                    await ctx.defer()
-
             leaderboard = self.bot.get_cog("Lb")
 
             song_list_filtered_by_unit = []

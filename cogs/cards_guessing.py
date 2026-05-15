@@ -12,13 +12,24 @@ from discord.ext import commands, tasks
 from storage.card_storage import CardStorage
 from storage.character_storage import CharacterStorage
 from storage.points_ledger_storage import PointsLedgerStorage
-from utility.decorators import retry_async
 from utility.utility_functions import logger, active_session
 from utility.filters import build_card_filter_cache, get_cached_card_filter
 from utility.r2 import connect_to_r2_storage, get_mask_from_r2, get_object_with_retry
 from utility.image import generate_img_crop, generate_foreground_crop_from_mask
 from utility.constants import UNITS, CARD_CROP_SIZE
 from views.buttons import Buttons
+
+
+# TODO: refactor the 3 guessing game cogs by extracting the common loop to a BaseGuessingCog base class
+# the common structure:
+# 1. pick a random item from the pool
+# 2. build the "question" to send        ← differs
+# 3. fetch and prepare the image         ← differs (lyrics delays it)
+# 4. send the question
+# 5. guess loop:
+  #  a. check the guess                  ← differs slightly
+  #  b. on correct/endguess: send answer with image
+  #  c. on timeout: send answer with image
 
 
 class CardsGuessing(commands.Cog):
@@ -89,14 +100,6 @@ class CardsGuessing(commands.Cog):
         active_session[ctx.channel_id] = True
 
         try:
-            @retry_async(retries=3, delay=2)
-            async def defer_with_retry(context):
-                await context.defer()
-            try:
-                await defer_with_retry(ctx)
-            except (discord.HTTPException, discord.errors.NotFound, aiohttp.ClientOSError, ConnectionResetError, asyncio.TimeoutError, asyncio.CancelledError) as e:
-                logger.warning(f"Defer failed, continuing without defer: {e}")
-
             await self.card_guess_helper(ctx, filtered_cards)
 
         except (asyncio.TimeoutError, asyncio.CancelledError) as e:
@@ -110,22 +113,27 @@ class CardsGuessing(commands.Cog):
 
     @cards.command(name="guess", description="Guess from all cards! (1*s excluded)")
     async def guess_card(self, ctx: discord.ApplicationContext):
+        await ctx.defer()
         await self.start_game(ctx, self.card_list.card_data)
 
     @cards.command(name="fourstarguess", description="Guess from all 4* cards!")
     async def guess_four_star(self, ctx):
+        await ctx.defer()
         await self.start_game(ctx, get_cached_card_filter("four_star", self.card_list.card_data))
 
     @cards.command(name="threestarguess", description="Guess from all 3* cards!")
     async def guess_three_star(self, ctx):
+        await ctx.defer()
         await self.start_game(ctx, get_cached_card_filter("three_star", self.card_list.card_data))
 
     @cards.command(name="notwostarguess", description="Guess from all cards that aren't 2*!")
     async def guess_no_two_star(self, ctx):
+        await ctx.defer()
         await self.start_game(ctx, get_cached_card_filter("no_two_star", self.card_list.card_data))
 
     @cards.command(name="twostarguess", description="Guess from all 2* cards!")
     async def guess_two_star(self, ctx):
+        await ctx.defer()
         await self.start_game(ctx, get_cached_card_filter("two_star", self.card_list.card_data))
 
     @cards.command(name="bdayguess", description="Guess from all birthday rarity cards!")
@@ -138,6 +146,7 @@ class CardsGuessing(commands.Cog):
             description="Birthday rotation",
         ) = None, #type: ignore
     ):
+        await ctx.defer()
         if rotation:
             await self.start_game(ctx, get_cached_card_filter(f"birthday{rotation}", self.card_list.card_data))
         else:
@@ -145,22 +154,27 @@ class CardsGuessing(commands.Cog):
 
     @cards.command(name="collabguess", description="Guess from collaboration cards!")
     async def guess_collab(self, ctx):
+        await ctx.defer()
         await self.start_game(ctx, get_cached_card_filter("collab", self.card_list.card_data))
 
     @cards.command(name="tamagotchiguess", description="Guess from tamagotchi cards!")
     async def guess_tamagotchi(self, ctx):
+        await ctx.defer()
         await self.start_game(ctx, get_cached_card_filter("tamagotchi", self.card_list.card_data))
 
     @cards.command(name="sanrioguess", description="Guess from sanrio cards!")
     async def guess_sanrio(self, ctx):
+        await ctx.defer()
         await self.start_game(ctx, get_cached_card_filter("sanrio", self.card_list.card_data))
 
     @cards.command(name="movieguess", description="Guess from movie cards!")
     async def guess_movie(self, ctx):
+        await ctx.defer()
         await self.start_game(ctx, get_cached_card_filter("movie", self.card_list.card_data))
 
     @cards.command(name="unitguess", description="Guess from cards from a specific unit!")
     async def guess_unit(self, ctx, unit: discord.Option(str, choices=UNITS)):  # type: ignore
+        await ctx.defer()
         cards_filtered = get_cached_card_filter(f"unit:{unit}", self.card_list.card_data) or self.card_list.card_data
         await self.start_game(ctx, cards_filtered)
 
