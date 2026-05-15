@@ -1,4 +1,5 @@
 import asyncio
+import os
 import random
 from io import BytesIO
 from re import sub
@@ -6,11 +7,15 @@ from dotenv import load_dotenv
 
 import discord
 from aiohttp import ClientSession
+from PIL import Image
 from discord.ext import commands, tasks
 
 from storage.song_storage import SongStorage
 from storage.points_ledger_storage import PointsLedgerStorage
-from utility.utility_functions import *
+from utility.utility_functions import logger, sanitize_file_name, guess_matches, sanitize_guess, active_session
+from utility.filters import build_song_unit_cache, filter_songs_by_unit
+from utility.r2 import connect_to_r2_storage, get_object_with_retry
+from utility.constants import OWNER_ID, OWNER_SERVER_ID, PATTERN, SONG_JACKET_THUMBNAIL_SIZE, UNITS
 from views.buttons import Buttons
 
 
@@ -66,15 +71,15 @@ class LyricsGuessing(commands.Cog):
         if language == "en":
             lyrics = {x["romaji_name"]: x["english_lyrics"] for x in song_list_filtered_by_unit}
             song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit
-                              if x["english_lyrics"] not in (None, [""])]
+                              if x["english_lyrics"] not in (None, "", [""])]
         if language == "jp":
             lyrics = {x["romaji_name"]: x["kanji_lyrics"] for x in song_list_filtered_by_unit}
             song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit
-                              if x["kanji_lyrics"] not in (None, [""])]
+                              if x["kanji_lyrics"] not in (None, "", [""])]
         if language == "romaji":
             lyrics = {x["romaji_name"]: x["romaji_lyrics"] for x in song_list_filtered_by_unit}
             song_name_list = [x["romaji_name"] for x in song_list_filtered_by_unit
-                              if x["romaji_lyrics"] not in (None, [""])]
+                              if x["romaji_lyrics"] not in (None, "", [""])]
 
         if not song_name_list:
             user = await self.bot.fetch_user(OWNER_SERVER_ID)
@@ -149,32 +154,28 @@ class LyricsGuessing(commands.Cog):
                 if is_finished:
                     break
             except asyncio.TimeoutError:
-                await ctx.followup.send(f"Time's up! The song was **{song['romaji_name']}**!",
+                buttons_view = Buttons(ctx, ["Play Again"], self.guess_the_song,
+                                       ["romaji", song["unit"]])
+                sent = await ctx.followup.send(f"Time's up! The song was **{song['romaji_name']}**!",
                                         file=file,
-                                        view=Buttons(ctx, ["Play Again"], self.guess_the_song,
-                                                     ["romaji", song["unit"]]))
+                                        view=buttons_view)
+                buttons_view.message = sent
                 break
 
     async def check_guess(self, ctx, guess, song, buffer, song_list_filtered_by_unit, leaderboard):
         if guess.content.lower().strip().startswith("."):
             return False
 
-        guessed_song = sub(pattern=PATTERN, string=guess.content.strip().lower(), repl="")
-        guessed_song = guessed_song.replace(" ", "")
-        guessed_song = guessed_song.strip()
+        guessed_raw = guess.content.strip()
 
-        if (
-            guessed_song in song["aliases"]
-            or guessed_song == song["romaji_name"].lower()
-            or guessed_song == sub(pattern=PATTERN, repl=" ", string=song["romaji_name"]).lower()
-            or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).lower()
-            or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).replace(" ", "")
-        ):
+        if guess_matches(guessed_raw, song["romaji_name"], song["aliases"]):
+            buttons_view = Buttons(ctx, ["Play Again"], self.guess_the_song, ["romaji", song["unit"]])
             sent = await ctx.followup.send(
                 f"Congrats {guess.author.mention}! You guessed **{song['romaji_name']}** correctly!",
                 file=discord.File(fp=buffer, filename="jacket.png"),
-                view=Buttons(ctx, ["Play Again"], self.guess_the_song, ["romaji", song["unit"]])
+                view=buttons_view
             )
+            buttons_view.message = sent
             user_id = guess.author.id
             guild_id = ctx.guild.id if ctx.guild else 0
             channel_id = ctx.channel.id if ctx.channel else 0
@@ -197,20 +198,23 @@ class LyricsGuessing(commands.Cog):
             else:
                 await ctx.followup.send("Error updating lb")
             return True
-        elif guessed_song == "endguess":
-            await ctx.followup.send(
+        elif guessed_raw.lower().strip() == "endguess":
+            buttons_view = Buttons(ctx, ["Play Again"], self.guess_the_song, ["romaji", song["unit"]])
+            sent = await ctx.followup.send(
                 f"Giving up? The song was **{song['romaji_name']}**!",
                 file=discord.File(fp=buffer, filename="jacket.png"),
-                view=Buttons(ctx, ["Play Again"], self.guess_the_song, ["romaji", song["unit"]])
+                view=buttons_view
             )
+            buttons_view.message = sent
             return True
         else:
+            # Check if guess matches any other song in the list to provide a hint
+            guessed_song = sanitize_guess(guessed_raw)
             temp = next(
                 (
                     s["romaji_name"]
                     for s in song_list_filtered_by_unit
-                    if guessed_song in [sub(pattern=PATTERN, repl="", string=a.lower()) for a in s["aliases"]]
-                    or guessed_song == sub(pattern=PATTERN, repl="", string=s["romaji_name"].lower()).replace(" ", "")
+                    if guess_matches(guessed_raw, s["romaji_name"], s["aliases"])
                 ),
                 None,
             )

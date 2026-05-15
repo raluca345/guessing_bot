@@ -1,7 +1,7 @@
 from discord.ext import commands
 from discord.ext.pages import Page, Paginator
 
-from utility.utility_functions import *
+from utility.constants import COMMANDS_PER_PAGE
 import discord
 
 class Help(commands.Cog):

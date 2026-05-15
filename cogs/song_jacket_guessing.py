@@ -1,4 +1,5 @@
 import asyncio
+import os
 import random
 from io import BytesIO
 from re import sub
@@ -6,11 +7,16 @@ from dotenv import load_dotenv
 
 import discord
 from aiohttp import ClientSession
+from PIL import Image
 from discord.ext import commands, tasks
 
 from storage.song_storage import SongStorage
 from storage.points_ledger_storage import PointsLedgerStorage
-from utility.utility_functions import *
+from utility.utility_functions import logger, active_session, sanitize_file_name, guess_matches
+from utility.filters import build_song_unit_cache, filter_songs_by_unit
+from utility.r2 import connect_to_r2_storage, get_object_with_retry
+from utility.image import generate_img_crop
+from utility.constants import UNITS, OWNER_SERVER_ID, SONG_JACKET_CROP_SIZE, OWNER_ID, PATTERN, SONG_JACKET_THUMBNAIL_SIZE
 from views.buttons import Buttons
 
 
@@ -56,6 +62,7 @@ class SongJacketGuessing(commands.Cog):
 
     @discord.slash_command(name="songjacketguess", description="Guess the song from a crop of its jacket!")
     async def song_jacket_guess(self, ctx: discord.ApplicationContext, unit: discord.Option(str, choices=UNITS)):  # type: ignore
+        await ctx.defer()
         song_list_filtered_by_unit = []
         ch_id = (ctx.channel.id if isinstance(ctx, discord.Interaction) else ctx.channel_id)
         if active_session[ch_id]:
@@ -67,10 +74,6 @@ class SongJacketGuessing(commands.Cog):
         active_session[ch_id] = True
 
         try:
-            if not isinstance(ctx, discord.Interaction):
-                if not ctx.interaction.response.is_done():
-                    await ctx.defer()
-
             leaderboard = self.bot.get_cog("Lb")
 
             song_list_filtered_by_unit = []
@@ -140,8 +143,10 @@ class SongJacketGuessing(commands.Cog):
                     tmp = song["romaji_name"]
                     logger.info(unit)
                     answer = discord.File(fp=BytesIO(answer_bytes), filename="answer.png")
-                    await ctx.followup.send(f"Time's up! The song was **{tmp}**!", file=answer,
-                                            view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit]))
+                    buttons_view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
+                    sent = await ctx.followup.send(f"Time's up! The song was **{tmp}**!", file=answer,
+                                            view=buttons_view)
+                    buttons_view.message = sent
                     break
         finally:
             active_session[ch_id] = False
@@ -151,23 +156,17 @@ class SongJacketGuessing(commands.Cog):
         if guess.content.lower().strip().startswith("."):
             return False
 
-        guessed_song = sub(pattern=PATTERN, string=guess.content.strip().lower(), repl="")
-        guessed_song = guessed_song.replace(" ", "")
-        guessed_song = guessed_song.strip()  # making sure trailing spaces are really gone
-        logger.info("guess - %s", guessed_song)
-        if (
-            guessed_song in song["aliases"]
-            or guessed_song == song["romaji_name"].lower()
-            or guessed_song == sub(pattern=PATTERN, repl=" ", string=song["romaji_name"]).lower()
-            or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).lower()
-            or guessed_song == sub(pattern=PATTERN, repl="", string=song["romaji_name"]).replace(" ", "")
-        ):
+        guessed_raw = guess.content.strip()
+
+        if guess_matches(guessed_raw, song["romaji_name"], song["aliases"]):
             logger.info(unit)
+            buttons_view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
             sent = await ctx.followup.send(
                 f"Congrats {guess.author.mention}! You guessed **{song['romaji_name']}** correctly!",
                 file=answer,
-                view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
+                view=buttons_view
             )
+            buttons_view.message = sent
             user_id = guess.author.id
             guild_id = ctx.guild.id if ctx.guild else 0
             channel_id = ctx.channel.id if ctx.channel else 0
@@ -191,21 +190,23 @@ class SongJacketGuessing(commands.Cog):
                 await ctx.followup.send("Error updating lb")
                 logger.error("Error updating lb")
             return True
-        elif guessed_song == "endguess":
+        elif guessed_raw.lower().strip() == "endguess":
             endguess_answer = discord.File(fp=BytesIO(answer_bytes), filename="answer.png")
-            await ctx.followup.send(
+            buttons_view = Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
+            sent = await ctx.followup.send(
                 f"Giving up? The song was **{song['romaji_name']}**!",
                 file=endguess_answer,
-                view=Buttons(ctx, ["Play Again"], self.song_jacket_guess, [unit])
+                view=buttons_view
             )
+            buttons_view.message = sent
             return True
         else:
+            # Check if guess matches any other song in the list to provide a hint
             temp = next(
                 (
                     s["romaji_name"]
                     for s in song_list_filtered_by_unit
-                    if guessed_song in [sub(pattern=PATTERN, repl="", string=a.lower()) for a in s["aliases"]]
-                    or guessed_song == sub(pattern=PATTERN, repl="", string=s["romaji_name"].lower()).replace(" ", "")
+                    if guess_matches(guessed_raw, s["romaji_name"], s["aliases"])
                 ),
                 None,
             )

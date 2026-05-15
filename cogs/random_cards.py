@@ -11,9 +11,10 @@ from PIL import Image
 from dotenv import load_dotenv
 
 from storage.card_storage import CardStorage
-from utility.utility_functions import get_object_with_retry, logger, retry_async
+from utility.utility_functions import logger
+from utility.decorators import retry_async
+from utility.r2 import get_object_with_retry, connect_to_r2_storage
 from utility.constants import *
-from utility.utility_functions import connect_to_r2_storage
 
 class RandomCard(commands.Cog):
     def __init__(self, bot):

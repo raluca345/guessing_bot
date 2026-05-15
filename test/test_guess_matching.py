@@ -1,26 +1,6 @@
 import pytest
-from re import sub
 
-from utility.constants import PATTERN
-
-
-def sanitize_guess(raw_guess: str) -> str:
-    """Reproduce the sanitization applied to user guesses in both cogs."""
-    guessed = sub(pattern=PATTERN, string=raw_guess.strip().lower(), repl="")
-    guessed = guessed.replace(" ", "")
-    return guessed.strip()
-
-
-def sanitize_aliases(aliases: list[str]) -> list[str]:
-    """Reproduce the alias sanitization applied before comparison."""
-    return [sub(pattern=PATTERN, repl="", string=s.lower()) for s in aliases]
-
-
-def guess_matches(raw_guess: str, romaji_name: str, aliases: list[str]) -> bool:
-    """Return True if the guess matches the song name or any alias."""
-    guessed = sanitize_guess(raw_guess)
-    clean_aliases = sanitize_aliases(aliases)
-    return guessed in clean_aliases or guessed == romaji_name.lower()
+from utility.utility_functions import guess_matches, sanitize_guess, sanitize_aliases
 
 
 class TestQuestionMarkGuesses:

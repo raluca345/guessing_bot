@@ -14,7 +14,8 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from storage.character_storage import CharacterStorage
 
-from utility.utility_functions import logger, retry_async
+from utility.utility_functions import logger
+from utility.decorators import retry_async
 from utility.constants import *
 import os
 import tweepy
