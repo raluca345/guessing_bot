@@ -34,12 +34,12 @@ class Alias(commands.Cog):
 
     @alias.command(name="viewsong", description="View a song's aliases")
     async def alias_view_song(self, ctx: discord.ApplicationContext, song: discord.Option(str, autocomplete=song_name_autocomplete)):  # type: ignore
-        aliases = next((s.aliases for s in self.song_list.song_data if s.romaji_name == song), None)
-        if not aliases:
+        raw_aliases = next((s.raw_aliases for s in self.song_list.song_data if s.romaji_name == song), None)
+        if not raw_aliases:
             await ctx.respond(f"Song **{song}** not found!", ephemeral=True)
             return
 
-        embed = self._build_alias_embed(song, aliases)
+        embed = self._build_alias_embed(song, ";".join(raw_aliases))
         await ctx.respond(embed=embed)
 
     @alias.command(name="suggestsong", description="Suggest a song alias!")

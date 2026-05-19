@@ -35,6 +35,9 @@ class Help(commands.Cog):
         full_name = f"{parent_name} {command.name}".strip()
         app_commands = []
 
+        if any('is_owner' in str(check) for check in command.checks):
+            return app_commands
+
         if isinstance(command, discord.SlashCommandGroup):
             for subcommand in command.subcommands:
                 app_commands.extend(self.collect_command_info(subcommand, full_name))

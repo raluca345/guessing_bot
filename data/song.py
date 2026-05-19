@@ -11,6 +11,7 @@ class Song:
     id: int
     romaji_name: str
     aliases: list[str]
+    raw_aliases: list[str]
     unit: str
     english_lyrics: list[str]
     kanji_lyrics: list[str]
@@ -19,17 +20,19 @@ class Song:
     @classmethod
     def from_db_row(cls, row: dict) -> "Song":
         aliases_raw = (row.get("aliases") or "").split(";")
-        aliases = [a.lower() for a in aliases_raw if a]
+        raw_aliases = [a for a in aliases_raw if a]
+        aliases = [a.lower() for a in raw_aliases]
         aliases.append(row["romaji_name"].lower())
 
         return cls(
             id=row["id"],
             romaji_name=row["romaji_name"],
             aliases=sanitize_aliases(aliases),
+            raw_aliases=raw_aliases,
             unit=row["unit"],
-            english_lyrics=[line for line in (row.get("english_lyrics")).splitlines() if line.strip()],
-            kanji_lyrics=[line for line in (row.get("kanji_lyrics")).splitlines() if line.strip()],
-            romaji_lyrics=[line for line in (row.get("romaji_lyrics")).splitlines() if line.strip()],
+            english_lyrics=[line for line in (row.get("english_lyrics") or "").splitlines() if line.strip()],
+            kanji_lyrics=[line for line in (row.get("kanji_lyrics") or "").splitlines() if line.strip()],
+            romaji_lyrics=[line for line in (row.get("romaji_lyrics") or "").splitlines() if line.strip()],
         )
 
     def lyrics_for(self, language: str) -> list[str]:
@@ -50,6 +53,8 @@ class Song:
 
     def random_lyric_pair(self, language: str, rng: random.Random | None = None) -> tuple[str, str]:
         lyrics_pool = self.lyrics_for(language)
+        if len(lyrics_pool) == 0:
+            return "", ""
         if len(lyrics_pool) == 1:
             return lyrics_pool[0], lyrics_pool[0]
         generator = rng or random

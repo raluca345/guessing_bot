@@ -20,7 +20,7 @@ intents.guilds = True
 intents.members = True
 
 
-bot = discord.Bot(intents=intents, activity=discord.Game(name="Guessing cards and songs"))
+bot = discord.Bot(intents=intents, activity=discord.Game(name="Guessing cards and songs", type=discord.ActivityType.playing))
 
 
 cogs_list = [f.split(".")[0] for f in os.listdir(os.getcwd() + "/cogs/active") if not f.startswith("__")]
