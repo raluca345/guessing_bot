@@ -5,6 +5,8 @@ import os
 import re
 from collections import defaultdict
 
+from utility.constants import PATTERN
+
 # Logger setup
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -48,10 +50,6 @@ def sanitize_file_name(file_name):
     return re.sub(r'[<>:"/\\|?*]', '-', file_name)
 
 
-# Pattern for sanitizing guess strings (from constants)
-from utility.constants import PATTERN
-
-
 def sanitize_guess(raw_guess: str) -> str:
     """Sanitize a user's raw guess for comparison.
     
@@ -85,3 +83,25 @@ def guess_matches(raw_guess: str, romaji_name: str, aliases: list[str]) -> bool:
     clean_aliases = sanitize_aliases(aliases)
     return guessed in clean_aliases or guessed == romaji_name.lower()
 
+
+def find_wrong_but_valid(raw_guess: str, song_pool: list) -> str | None:
+    """Find if a guess matches another song in a pool.
+
+    Useful for providing hints to the player when they guess a song name
+    that exists in the pool but isn't the target song.
+
+    Args:
+        raw_guess: The raw user guess
+        song_pool: List of song objects with romaji_name and aliases attributes
+
+    Returns:
+        The romaji_name of the matched song if found, None otherwise
+    """
+    return next(
+        (
+            s.romaji_name
+            for s in song_pool
+            if guess_matches(raw_guess, s.romaji_name, s.aliases)
+        ),
+        None,
+    )

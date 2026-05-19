@@ -9,19 +9,17 @@ in a future version.
 """
 
 import asyncio
-import discord
-from discord.ext import commands
-from dotenv import load_dotenv
-from storage.character_storage import CharacterStorage
-
-from utility.utility_functions import logger
-from utility.decorators import retry_async
-from utility.constants import *
 import os
+
+import discord
 import tweepy
 import tweepy.asynchronous
+from discord.ext import commands
 
-load_dotenv()
+from storage.character_storage import CharacterStorage
+from utility.constants import *
+from utility.decorators import retry_async
+from utility.utility_functions import logger
 
 
 class _CglFilteredStream(tweepy.asynchronous.AsyncStreamingClient):
@@ -73,10 +71,7 @@ class TwtHub(commands.Cog):
         if self.stream_task:
             self.stream_task.cancel()
         if self.stream:
-            try:
-                self.stream.disconnect()
-            except Exception:
-                pass
+            self.stream.disconnect()
 
     async def _stream_worker(self):
         bearer_token = os.getenv("BEARER_TOKEN_2")
@@ -189,6 +184,7 @@ class TwtHub(commands.Cog):
             @retry_async(retries=3, delay=2)
             async def send_with_retry(chan, msg):
                 await chan.send(msg)
+
             await send_with_retry(channel, message)
 
             self._last_sent_tweet_id = tweet.id

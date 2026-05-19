@@ -1,10 +1,10 @@
-from storage.base_storage import BaseStorage
+from contextlib import closing
+
+from utility.db import temp_connection
+from utility.utility_functions import logger
 
 
-class PointsLedgerStorage(BaseStorage):
-    def __init__(self):
-        super().__init__(use_dictionary=False)
-
+class PointsLedgerStorage:
     def record_points(
         self,
         guild_id: int,
@@ -20,7 +20,13 @@ class PointsLedgerStorage(BaseStorage):
             (guild_id, channel_id, user_id, points, game_type, card_id, message_id)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
-        self.execute_insert(
-            query,
-            (guild_id, channel_id, user_id, points, game_type, card_id, message_id),
-        )
+        try:
+            with temp_connection() as connection:
+                with closing(connection.cursor()) as cursor:
+                    cursor.execute(
+                        query,
+                        (guild_id, channel_id, user_id, points, game_type, card_id, message_id),
+                    )
+                    connection.commit()
+        except Exception:
+            logger.exception("Failed to record points")

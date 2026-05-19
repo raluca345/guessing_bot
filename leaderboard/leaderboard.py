@@ -1,8 +1,9 @@
 import discord
 from discord import Embed
-from discord.ext.pages import Page, Paginator
-from utility.utility_functions import logger
+from discord.ext.pages import Paginator
+
 from utility.db import connect
+from utility.utility_functions import logger
 
 class Leaderboard:
 
@@ -17,41 +18,14 @@ class Leaderboard:
             self.connection.ping(reconnect=True, attempts=3, delay=2)
         except Exception:
             logger.warning("Database connection lost, reconnecting...")
-            try:
-                self.connection.close()
-            except Exception:
-                pass
+            self.connection.close()
             self.connection = connect()
-        try:
-            if hasattr(self, "cursor") and self.cursor is not None:
-                try:
-                    self.cursor.close()
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        self.cursor.close()
         self.cursor = self.connection.cursor(dictionary=True)
 
     def close(self):
-        try:
-            if hasattr(self, "cursor") and self.cursor is not None:
-                try:
-                    self.cursor.close()
-                except Exception:
-                    pass
-                self.cursor = None
-        except Exception:
-            pass
-
-        try:
-            if hasattr(self, "connection") and self.connection is not None:
-                try:
-                    self.connection.close()
-                except Exception:
-                    pass
-                self.connection = None
-        except Exception:
-            pass
+        self.cursor.close()
+        self.connection.close()
 
     def get_data(self):
         self._ensure_connection()
@@ -59,7 +33,6 @@ class Leaderboard:
 
         query = "SELECT user_id, points FROM leaderboard"
         self.cursor.execute(query)
-
         rows = self.cursor.fetchall()
 
         for row in rows:
@@ -75,13 +48,10 @@ class Leaderboard:
         self.connection.commit()
 
     def delete_user(self, user_id):
-        try:
-            self._ensure_connection()
-            query = "DELETE FROM leaderboard WHERE user_id = %s"
-            self.cursor.execute(query, (user_id,))
-            self.connection.commit()
-        except Exception:
-            pass
+        self._ensure_connection()
+        query = "DELETE FROM leaderboard WHERE user_id = %s"
+        self.cursor.execute(query, (user_id,))
+        self.connection.commit()
 
     @staticmethod
     async def lb_pages(ctx: discord.ApplicationContext, pages: list[Embed]):

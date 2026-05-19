@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from utility_functions import active_session, get_active_session_lock
+from utility.utility_functions import active_session, get_active_session_lock
 
 
 @asynccontextmanager

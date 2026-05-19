@@ -1,26 +1,10 @@
-SONG_JACKET_THUMBNAIL_SIZE = (200, 200)
-CARD_CROP_SIZE = 250
-BIGGER_CARD_CROP_SIZE = 400
-SONG_JACKET_CROP_SIZE = 150
-VERTICAL_CARDS = [
-    "res013_no033",
-    "res014_no034",
-    "res015_no033",
-    "res016_no033",
-    "res018_no044",
-]
-COMMANDS_PER_PAGE = 6
+"""Game data constants."""
+
 PATTERN = r'\W+'  # removes all characters that aren't letters or digits; should keep japanese or other languages charas
-WEEK_ANNOUNCEMENT_CHANNEL = 1186018902413680640
-OTHER_ANNOUNCEMENT_CHANNEL = 1186018985947439174
-CGL_TWT_ACC_ID = 1596219475019583488
-CGL_SERVER_ID = 1074836992384303114
-OWNER_ID = 599999906039726090
-OWNER_SERVER_ID = 1076494695204659220
-CGL_TWT_TEST_ACC_ID = 1292732679843123201
 
 UNITS = ["None", "VIRTUAL SINGER", "Leo/need", "MORE MORE JUMP!", "Wonderlands × Showtime", "Vivid BAD SQUAD",
          "25-ji, Nightcord de.", "Other"]
+
 character_id_to_unit = {
     "Leo/need": [1, 2, 3, 4],
     "MORE MORE JUMP!": [5, 6, 7, 8],
@@ -89,3 +73,4 @@ TAMAGOTCHI_CARDS_IDS = list(range(1242, 1252))
 TOUHOU_MIKU_ID = 1167
 EVILLIOUS_CARDS_IDS = list(range(335, 341))
 MOVIE_CARDS_IDS = list(range(1070, 1097))
+

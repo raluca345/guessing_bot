@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from cogs.twt_hub import TwtHub
+from cogs.deprecated.twt_hub import TwtHub
 from utility.constants import CGL_SERVER_ID, WEEK_ANNOUNCEMENT_CHANNEL, CGL_TWT_ACC_ID
 
 class AsyncIterator:

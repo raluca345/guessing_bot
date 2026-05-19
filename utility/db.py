@@ -47,18 +47,17 @@ def connect_to_db(config, attempts=3, delay=2):
 
 
 @contextmanager
-def temp_connect():
+def temp_connection():
     """Context manager that yields a DB connection and ensures it is closed.
 
     Use this for short-lived DB work to guarantee connections are returned to
     the pool even on error.
     """
     conn = connect()
+    if conn is None:
+        raise RuntimeError("Database connection unavailable")
+
     try:
         yield conn
     finally:
-        try:
-            if conn is not None:
-                conn.close()
-        except Exception:
-            pass
+        conn.close()

@@ -1,54 +1,18 @@
-"""Card and song filtering utilities with caching."""
+"""Card and song filtering utilities."""
 from utility.constants import (
     SECOND_ANNI, THIRD_ANNI, FOURTH_ANNI, FIFTH_ANNI, SIXTH_ANNI,
     SANRIO_CARDS_IDS, ENSTARS_CARDS_IDS, TAMAGOTCHI_CARDS_IDS,
     TOUHOU_MIKU_ID, EVILLIOUS_CARDS_IDS, MOVIE_CARDS_IDS,
-    UNITS, unit_aliases, character_id_to_unit
+    unit_aliases, character_id_to_unit
 )
 
-
-# Song caching
-song_unit_cache = {}
-
-
-def build_song_unit_cache(songs):
-    """Precompute and store filtered song lists for each unit."""
-    global song_unit_cache
-    song_unit_cache = {}
-    try:
-        for u in UNITS:
-                if u == "None":
-                    song_unit_cache[u] = list(songs)
-                else:
-                    song_unit_cache[u] = [s for s in songs if s.get("unit") == u]
-    except Exception:
-        song_unit_cache = {"None": list(songs)}
-    return song_unit_cache
-
-
-def clear_song_unit_cache():
-    """Clear the precomputed cache.
-
-    Use this before rebuilding or if you need to force recomputation.
-    """
-    global song_unit_cache
-    song_unit_cache.clear()
-
-
 def filter_songs_by_unit(songs, unit):
-    """Return a list of songs filtered by `unit`, using cache if available.
-
-    If the cache is empty, this will compute the filtered list on-the-fly
-    (so callers still work before cache build).
-    """
-    if song_unit_cache:
-        cached = song_unit_cache.get(unit)
-        if cached is not None:
-            return list(cached)
+    """Return songs filtered by unit."""
     if unit == "None":
         return list(songs)
-    computed = [s for s in songs if s.get("unit") == unit]
-    return computed
+    def get_unit(song):
+        return song.get("unit")
+    return [s for s in songs if s["unit"] == unit]
 
 
 # Card filters
@@ -162,71 +126,8 @@ def unit_filter(cards, unit):
     return filtered_cards
 
 
-# Card filter cache and helpers
-card_filter_cache = {}
-
-
-def build_card_filter_cache(cards):
-    """Precompute and store commonly used card filter lists.
-
-    Cached keys:
-    - 'four_star', 'three_star', 'two_star', 'no_two_star', 'sanrio'
-    - 'birthday', 'birthday1'..'birthday5'
-    - 'unit:{unit}' for each unit in UNITS
-    """
-    global card_filter_cache
-    card_filter_cache = {}
-    try:
-        card_filter_cache['four_star'] = four_star_filter(cards)
-        card_filter_cache['three_star'] = three_star_filter(cards)
-        card_filter_cache['two_star'] = two_star_filter(cards)
-        card_filter_cache['no_two_star'] = no_two_star_filter(cards)
-        card_filter_cache['sanrio'] = sanrio_filter(cards)
-        card_filter_cache['tamagotchi'] = tamagotchi_filter(cards)
-        card_filter_cache['collab'] = collab_filter(cards)
-        card_filter_cache['movie'] = movie_filter(cards)
-
-        card_filter_cache['birthday'] = birthday_filter(cards)
-        card_filter_cache['birthday1'] = birthday1_filter(cards)
-        card_filter_cache['birthday2'] = birthday2_filter(cards)
-        card_filter_cache['birthday3'] = birthday3_filter(cards)
-        card_filter_cache['birthday4'] = birthday4_filter(cards)
-        card_filter_cache['birthday5'] = birthday5_filter(cards)
-
-        try:
-            for u in UNITS:
-                key = f"unit:{u}"
-                if u == "None":
-                    card_filter_cache[key] = list(cards)
-                else:
-                    # unit_filter already returns None for "None" unit, or a filtered list
-                    filtered = unit_filter(cards, u) or list(cards)
-                    card_filter_cache[key] = filtered
-        except Exception:
-            pass
-    except Exception:
-        card_filter_cache = {}
-    return card_filter_cache
-
-
-def clear_card_filter_cache():
-    """Clear the card filter cache."""
-    global card_filter_cache
-    card_filter_cache.clear()
-
-
-def get_cached_card_filter(name, cards=None):
-    """Return cached filtered card list by name, or compute on-the-fly if cache missing.
-
-    `name` examples: 'four_star', 'birthday2', 'unit:MyUnit'
-    """
-    if card_filter_cache:
-        res = card_filter_cache.get(name)
-        if res is not None:
-            return list(res)
-    # Fallbacks: compute using existing filter functions if available
-    if cards is None:
-        return []
+def get_card_filter(name, cards):
+    """Return filtered cards by filter `name` from the in-memory card list."""
     if name == 'four_star':
         return four_star_filter(cards)
     if name == 'three_star':

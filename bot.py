@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 from utility.utility_functions import logger, active_session
 from utility.constants import *
 
+
+load_dotenv()
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.messages = True
@@ -19,17 +22,13 @@ intents.members = True
 
 bot = discord.Bot(intents=intents, activity=discord.Game(name="Guessing cards and songs"))
 
-# Load all cogs EXCEPT twt_hub (which is DEPRECATED and disabled by default).
-# The Twitter API free tier has been discontinued so this functionality can't be supported anymore
-cogs_list = [f.split(".")[0] for f in os.listdir(os.getcwd() + "/cogs") if not f.startswith("__") and f.split(".")[0] not in ["twt_hub", "base_guessing_cog"]]
+
+cogs_list = [f.split(".")[0] for f in os.listdir(os.getcwd() + "/cogs/active") if not f.startswith("__")]
 logger.info(f"Loading cogs: {cogs_list}")
 
 for cog in cogs_list:
-    bot.load_extension(f'cogs.{cog}')
+    bot.load_extension(f'cogs.active.{cog}')
 
-
-SKIP_CHANNEL_IDS: set[int] = {1074836993575501826}
-SKIP_CHANNEL_NAMES = {"cgl-lounge"}
 
 
 async def send_error_message(ctx: discord.ApplicationContext, message: str) -> bool:
@@ -38,14 +37,14 @@ async def send_error_message(ctx: discord.ApplicationContext, message: str) -> b
         # Try followup first (works if ctx was deferred)
         await ctx.followup.send(message, ephemeral=True)
         return True
-    except (discord.NotFound, discord.HTTPException, AttributeError):
-        pass
+    except (discord.NotFound, discord.HTTPException, AttributeError) as e:
+        logger.debug("Could not send command error via followup: %s", e)
     try:
         # Fallback to channel send
         await ctx.channel.send(message)
         return True
-    except (discord.Forbidden, discord.HTTPException):
-        pass
+    except (discord.Forbidden, discord.HTTPException) as e:
+        logger.debug("Could not send command error to channel: %s", e)
     return False
 
 
@@ -98,8 +97,6 @@ async def reload(ctx, cog_name: discord.Option(choices=cogs_list)): #type: ignor
         await ctx.respond("Couldn't find a cog with that name!", ephemeral=True)
 
 
-load_dotenv()
-
 async def check_server_permissions(channel_id):
     server = bot.get_guild(CGL_SERVER_ID)
     channel = bot.get_channel(channel_id)
@@ -110,7 +107,6 @@ async def check_server_permissions(channel_id):
 
 
 def shutdown_handler(signum, frame):
-    """Handle SIGTERM and gracefully close the bot"""
     logger.info("Received shutdown signal, closing bot gracefully...")
     try:
         loop = asyncio.get_event_loop()
